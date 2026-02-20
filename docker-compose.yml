@@ -1,6 +1,10 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - PIP_INDEX_URL=${PIP_INDEX_URL:-https://pypi.org/simple}
     container_name: competition-web
     ports:
       - "5000:5000"
