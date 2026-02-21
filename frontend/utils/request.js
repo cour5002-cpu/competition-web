@@ -5,7 +5,7 @@ const _storageBaseUrl = (
     : ''
 )
 
-export const BASE_URL = _storageBaseUrl || 'http://127.0.0.1:5000'
+export const BASE_URL = _storageBaseUrl || 'https://drone-race.starweave.net'
 
 const request = (options) => {
   return new Promise((resolve, reject) => {
