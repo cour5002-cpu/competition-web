@@ -2,7 +2,7 @@
   <view class="container">
     <view class="header">
       <text class="title">管理员端</text>
-      <text class="subtitle">测试入口</text>
+      <text class="subtitle">报名审核与数据管理</text>
     </view>
 
     <view class="card">
@@ -38,7 +38,7 @@ export default {
   async onShow() {
     const token = String(uni.getStorageSync('admin_token') || '').trim()
     if (!token) {
-      uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+      uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
       return
     }
 
@@ -89,7 +89,7 @@ export default {
 
     logout() {
       try { uni.removeStorageSync('admin_token') } catch (e) {}
-      uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+      uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
     }
   }
 }
@@ -98,17 +98,18 @@ export default {
 <style scoped>
 .container {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   padding: 20px;
   box-sizing: border-box;
 }
 
 .header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, rgba(31, 75, 153, 1) 0%, rgba(14, 165, 164, 1) 100%);
   border-radius: 12px;
   padding: 20px;
   color: #fff;
   margin-bottom: 15px;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
 }
 
 .title {
@@ -125,10 +126,10 @@ export default {
 }
 
 .card {
-  background-color: #fff;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 16px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow);
 }
 
 .row {
@@ -138,28 +139,28 @@ export default {
 
 .label {
   width: 90px;
-  color: #666;
+  color: var(--muted);
   font-size: 14px;
 }
 
 .value {
   flex: 1;
-  color: #333;
+  color: var(--text);
   font-size: 14px;
 }
 
 .btn {
   margin-top: 10px;
-  background-color: #007aff;
+  background-color: var(--brand);
   color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .btn-secondary {
   margin-top: 10px;
   background-color: transparent;
-  color: #007aff;
-  border: 1px solid #007aff;
-  border-radius: 8px;
+  color: var(--brand);
+  border: 1px solid rgba(31, 75, 153, 0.55);
+  border-radius: 12px;
 }
 </style>

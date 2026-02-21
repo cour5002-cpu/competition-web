@@ -86,13 +86,13 @@
     </view>
 
     <view class="empty-state" v-else-if="hasSearched">
-      <view class="empty-icon">📭</view>
+      <image class="empty-icon" :src="emptyIcon" mode="aspectFit"></image>
       <text class="empty-text">暂无报名信息</text>
       <button class="go-register-btn" @click="goToRegister">立即报名</button>
     </view>
 
     <view class="initial-state" v-else>
-      <view class="initial-icon">🔍</view>
+      <image class="initial-icon" :src="searchIcon" mode="aspectFit"></image>
       <text class="initial-text">请输入手机号查询报名记录</text>
     </view>
   </view>
@@ -104,10 +104,14 @@ import auth from '../../utils/auth'
 
 export default {
   data() {
+    const emptySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="rgba(15, 23, 42, 0.55)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M9.5 12.5h.01"/><path d="M14.5 12.5h.01"/><path d="M9.5 16c1.5 1.3 3.5 1.3 5 0"/></svg>`
+    const searchSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="#1f4b99" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>`
     return {
       phone: '',
       applications: [],
-      hasSearched: false
+      hasSearched: false,
+      emptyIcon: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(emptySvg)}`,
+      searchIcon: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(searchSvg)}`
     }
   },
 
@@ -227,17 +231,17 @@ export default {
 <style scoped>
 .container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   min-height: 100vh;
 }
 
 .search-bar {
   display: flex;
   margin-bottom: 20px;
-  background-color: white;
+  background-color: var(--card);
   padding: 15px;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
 }
 
 .search-hint {
@@ -245,26 +249,28 @@ export default {
   margin-top: -10px;
   margin-bottom: 20px;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   padding: 0 5px;
 }
 
 .search-input {
   flex: 1;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   height: 42px;
   line-height: 42px;
   padding: 0 12px;
   font-size: 16px;
   margin-right: 10px;
   box-sizing: border-box;
+  background: #fff;
+  color: var(--text);
 }
 
 .search-btn {
-  background-color: #007aff;
+  background-color: var(--brand);
   color: white;
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 0 20px;
   font-size: 16px;
   height: 42px;
@@ -272,11 +278,11 @@ export default {
 }
 
 .application-item {
-  background-color: white;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 15px;
   margin-bottom: 15px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow);
 }
 
 .app-header {
@@ -289,7 +295,7 @@ export default {
 .project-name {
   font-size: 16px;
   font-weight: bold;
-  color: #333;
+  color: var(--text);
   flex: 1;
 }
 
@@ -307,13 +313,13 @@ export default {
 .participants-section {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 .participants-title {
   display: block;
   font-size: 14px;
-  color: #666;
+  color: var(--muted);
   margin-bottom: 8px;
 }
 
@@ -324,11 +330,11 @@ export default {
 }
 
 .participant-name {
-  background-color: #f8f9fa;
+  background-color: rgba(15, 23, 42, 0.04);
   padding: 4px 8px;
   border-radius: 12px;
   font-size: 12px;
-  color: #333;
+  color: var(--text);
 }
 
 .status-approved {
@@ -346,13 +352,13 @@ export default {
 
 .info-label {
   width: 60px;
-  color: #666;
+  color: var(--muted);
   font-size: 14px;
 }
 
 .info-value {
   flex: 1;
-  color: #333;
+  color: var(--text);
   font-size: 14px;
 }
 
@@ -364,7 +370,7 @@ export default {
 .app-footer {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 .submit-time {
@@ -380,18 +386,19 @@ export default {
 
 .empty-icon,
 .initial-icon {
-  font-size: 50px;
-  margin-bottom: 10px;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 12px;
 }
 
 .empty-text,
 .initial-text {
-  color: #666;
+  color: var(--muted);
 }
 
 .go-register-btn {
   margin-top: 15px;
-  background-color: #007aff;
+  background-color: var(--brand);
   color: white;
   border-radius: 20px;
   padding: 8px 20px;

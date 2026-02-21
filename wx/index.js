@@ -41,7 +41,7 @@ Page({
 
     wx.showLoading({ title: '提交中' });
     wx.request({
-      url: 'http://127.0.0.1:5000/api/register', // 确保路径包含蓝图前缀
+      url: 'http://127.0.0.1:5001/api/register', // 确保路径包含蓝图前缀
       method: 'POST',
       data: postData,
       success: (res) => {

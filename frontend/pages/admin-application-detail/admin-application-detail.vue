@@ -95,7 +95,7 @@ export default {
   async onShow() {
     const token = String(uni.getStorageSync('admin_token') || '').trim()
     if (!token) {
-      uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+      uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
       return
     }
     this.loadDetail()
@@ -237,16 +237,17 @@ export default {
 <style scoped>
 .container {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   padding: 16px;
   box-sizing: border-box;
 }
 
 .card {
-  background-color: #fff;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 14px;
   margin-bottom: 12px;
+  box-shadow: var(--shadow);
 }
 
 .head {
@@ -259,6 +260,7 @@ export default {
 .title {
   font-size: 16px;
   font-weight: 600;
+  color: var(--text);
 }
 
 .badge {
@@ -268,26 +270,26 @@ export default {
   color: #fff;
 }
 
-.b-pending { background-color: #ff9500; }
-.b-approved { background-color: #34c759; }
-.b-rejected { background-color: #ff3b30; }
-.b-default { background-color: #8e8e93; }
+.b-pending { background-color: #f59e0b; }
+.b-approved { background-color: #0ea5a4; }
+.b-rejected { background-color: #ef4444; }
+.b-default { background-color: rgba(15, 23, 42, 0.45); }
 
 .row {
   display: flex;
   padding: 8px 0;
-  border-bottom: 1px solid #f3f3f3;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .k {
   width: 90px;
-  color: #666;
+  color: var(--muted);
   font-size: 13px;
 }
 
 .v {
   flex: 1;
-  color: #111;
+  color: var(--text);
   font-size: 13px;
 }
 
@@ -300,11 +302,12 @@ export default {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 8px;
+  color: var(--text);
 }
 
 .p {
   padding: 6px 0;
-  color: #333;
+  color: rgba(15, 23, 42, 0.78);
   font-size: 13px;
 }
 
@@ -315,37 +318,41 @@ export default {
 
 .btn-approve {
   flex: 1;
-  background-color: #34c759;
+  background-color: var(--brand-2);
   color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
   height: 40px;
   line-height: 40px;
   font-size: 14px;
+  font-weight: 600;
 }
 
 .btn-reject {
   flex: 1;
-  background-color: #ff3b30;
+  background-color: var(--danger);
   color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
   height: 40px;
   line-height: 40px;
   font-size: 14px;
+  font-weight: 600;
 }
 
 .btn-secondary {
   flex: 1;
-  background-color: #f0f0f0;
-  color: #333;
-  border-radius: 8px;
+  background-color: transparent;
+  color: var(--brand);
+  border: 1px solid rgba(31, 75, 153, 0.55);
+  border-radius: 12px;
   height: 40px;
   line-height: 40px;
   font-size: 14px;
+  font-weight: 600;
 }
 
 .tip {
   margin-top: 10px;
-  color: #666;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -369,9 +376,10 @@ export default {
 
 .modal {
   width: 100%;
-  background-color: #fff;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 14px;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.28);
 }
 
 .modal-title {
@@ -379,15 +387,18 @@ export default {
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 10px;
+  color: var(--text);
 }
 
 .textarea {
   width: 100%;
-  border: 1px solid #eee;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   min-height: 90px;
   padding: 10px;
   box-sizing: border-box;
   font-size: 14px;
+  background: #fff;
+  color: var(--text);
 }
 </style>

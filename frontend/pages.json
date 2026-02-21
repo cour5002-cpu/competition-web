@@ -3,7 +3,7 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationBarTitleText": "十堰市第二届青少年无人机大赛"
+        "navigationBarTitleText": "青少年无人机大赛"
       }
     },
     {
@@ -93,13 +93,13 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "十堰市第二届青少年无人机大赛",
-    "navigationBarBackgroundColor": "#F8F8F8",
-    "backgroundColor": "#F8F8F8"
+    "navigationBarTitleText": "青少年无人机大赛",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F4F6FA"
   },
   "tabBar": {
-    "color": "#7A7E83",
-    "selectedColor": "#007aff",
+    "color": "#64748b",
+    "selectedColor": "#1F4B99",
     "borderStyle": "black",
     "backgroundColor": "#ffffff",
     "list": [

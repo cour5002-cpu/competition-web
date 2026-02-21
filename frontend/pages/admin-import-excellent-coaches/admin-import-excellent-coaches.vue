@@ -55,7 +55,7 @@ export default {
   async onShow() {
     const token = String(uni.getStorageSync('admin_token') || '').trim()
     if (!token) {
-      uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+      uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
       return
     }
   },
@@ -110,7 +110,7 @@ export default {
     upload() {
       const token = String(uni.getStorageSync('admin_token') || '').trim()
       if (!token) {
-        uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+        uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
         return
       }
 
@@ -164,7 +164,7 @@ export default {
       if (!this.result || !this.result.import_log_id) return
       const token = String(uni.getStorageSync('admin_token') || '').trim()
       if (!token) {
-        uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+        uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
         return
       }
 
@@ -199,29 +199,30 @@ export default {
 <style scoped>
 .container {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   padding: 16px;
   box-sizing: border-box;
 }
 
 .card {
-  background-color: #fff;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 14px;
+  box-shadow: var(--shadow);
 }
 
 .title {
   display: block;
   font-size: 18px;
   font-weight: bold;
-  color: #333;
+  color: var(--text);
   margin-bottom: 6px;
 }
 
 .desc {
   display: block;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   margin-bottom: 12px;
 }
 
@@ -231,23 +232,25 @@ export default {
 
 .btn {
   width: 100%;
-  background-color: #007aff;
+  background-color: var(--brand);
   color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
+  font-weight: 600;
 }
 
 .btn-secondary {
   width: 100%;
   background-color: transparent;
-  color: #007aff;
-  border: 1px solid #007aff;
-  border-radius: 8px;
+  color: var(--brand);
+  border: 1px solid rgba(31, 75, 153, 0.55);
+  border-radius: 12px;
   margin-top: 10px;
+  font-weight: 600;
 }
 
 .file-info {
   margin-top: 10px;
-  color: #333;
+  color: rgba(15, 23, 42, 0.78);
   font-size: 12px;
 }
 
@@ -257,7 +260,7 @@ export default {
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
-  color: #333;
+  color: rgba(15, 23, 42, 0.78);
 }
 
 .footer {

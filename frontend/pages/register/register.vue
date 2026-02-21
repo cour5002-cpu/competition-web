@@ -1,7 +1,7 @@
 <template>
   <view class="register-container">
     <view class="header">
-      <text class="title">十堰市第二届青少年无人机大赛</text>
+      <text class="title">青少年无人机大赛</text>
     </view>
     
     <form @submit="handleSubmit">
@@ -706,7 +706,7 @@ export default {
 <style scoped>
 .register-container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   min-height: 100vh;
 }
 
@@ -717,28 +717,31 @@ export default {
 
 .title {
   font-size: 24px;
-  font-weight: bold;
-  color: #333;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.5px;
 }
 
 .form-item {
   margin-bottom: 20px;
-  background-color: white;
+  background-color: var(--card);
   padding: 15px;
-  border-radius: 8px;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
 }
 
 .form-section {
   margin-bottom: 20px;
-  background-color: white;
+  background-color: var(--card);
   padding: 15px;
-  border-radius: 8px;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
 }
 
 .label {
   display: block;
-  font-size: 16px;
-  color: #333;
+  font-size: 13px;
+  color: rgba(15, 23, 42, 0.78);
   margin-bottom: 8px;
 }
 
@@ -746,17 +749,17 @@ export default {
   display: block;
   font-size: 18px;
   font-weight: bold;
-  color: #333;
+  color: var(--text);
   margin-bottom: 15px;
 }
 
 .picker {
   width: 100%;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   height: 44px;
   padding: 0 12px;
-  background-color: white;
+  background-color: #fff;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -768,7 +771,7 @@ export default {
 
 .picker-text {
   width: 100%;
-  color: #333;
+  color: var(--text);
   font-size: 16px;
   box-sizing: border-box;
   line-height: 44px;
@@ -783,19 +786,19 @@ export default {
 
 .input {
   width: 100%;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   height: 44px;
   padding: 0 12px;
   font-size: 16px;
-  background-color: white;
+  background-color: #fff;
   box-sizing: border-box;
   line-height: 44px;
 }
 
 .hint {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   margin-top: 5px;
   display: block;
 }
@@ -807,16 +810,16 @@ export default {
 .participant-label {
   display: block;
   font-size: 14px;
-  color: #333;
+  color: rgba(15, 23, 42, 0.78);
   margin-bottom: 5px;
 }
 
 .submit-btn {
   width: 100%;
-  background-color: #007aff;
+  background-color: var(--brand);
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 15px;
   font-size: 18px;
   font-weight: bold;

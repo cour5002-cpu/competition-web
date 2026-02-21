@@ -1,7 +1,7 @@
 <template>
   <view class="container">
     <view class="success-card">
-      <view class="success-icon">✅</view>
+      <image class="success-icon" :src="successIcon" mode="aspectFit"></image>
       <text class="success-title">报名成功！</text>
       <text class="success-message">您的报名信息已提交，请等待审核</text>
       
@@ -31,6 +31,12 @@
 
 <script>
 export default {
+  data() {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="#0ea5a4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.2 12.2l2.3 2.4 5.1-5.2"/></svg>`
+    return {
+      successIcon: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+    }
+  },
   methods: {
     viewMyApplications() {
       uni.navigateTo({
@@ -50,7 +56,7 @@ export default {
 <style scoped>
 .container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -58,39 +64,40 @@ export default {
 }
 
 .success-card {
-  background-color: white;
-  border-radius: 20px;
+  background-color: var(--card);
+  border-radius: 18px;
   padding: 40px 30px;
   text-align: center;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow);
   max-width: 350px;
   width: 100%;
 }
 
 .success-icon {
-  font-size: 80px;
-  margin-bottom: 20px;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
 }
 
 .success-title {
   display: block;
   font-size: 24px;
   font-weight: bold;
-  color: #333;
+  color: var(--text);
   margin-bottom: 10px;
 }
 
 .success-message {
   display: block;
   font-size: 16px;
-  color: #666;
+  color: var(--muted);
   margin-bottom: 30px;
   line-height: 1.5;
 }
 
 .next-steps {
   text-align: left;
-  background-color: #f8f9fa;
+  background-color: rgba(15, 23, 42, 0.04);
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 30px;
@@ -100,7 +107,7 @@ export default {
   display: block;
   font-size: 16px;
   font-weight: bold;
-  color: #333;
+  color: var(--text);
   margin-bottom: 15px;
 }
 
@@ -117,7 +124,7 @@ export default {
 .step-number {
   width: 24px;
   height: 24px;
-  background-color: #007aff;
+  background-color: var(--brand);
   color: white;
   border-radius: 50%;
   display: flex;
@@ -131,7 +138,7 @@ export default {
 
 .step-text {
   font-size: 14px;
-  color: #555;
+  color: rgba(15, 23, 42, 0.78);
   line-height: 1.4;
 }
 
@@ -142,10 +149,10 @@ export default {
 }
 
 .btn-primary {
-  background-color: #007aff;
+  background-color: var(--brand);
   color: white;
   border: none;
-  border-radius: 25px;
+  border-radius: 14px;
   padding: 15px 30px;
   font-size: 16px;
   font-weight: bold;
@@ -153,9 +160,9 @@ export default {
 
 .btn-secondary {
   background-color: transparent;
-  color: #007aff;
-  border: 2px solid #007aff;
-  border-radius: 25px;
+  color: var(--brand);
+  border: 2px solid rgba(31, 75, 153, 0.55);
+  border-radius: 14px;
   padding: 13px 30px;
   font-size: 16px;
 }

@@ -1,7 +1,7 @@
 {
-    "name" : "十堰市第二届青少年无人机大赛",
-    "appid" : "",
-    "description" : "十堰市第二届青少年无人机大赛小程序",
+    "name" : "青少年无人机大赛",
+    "appid" : "wx6136df91e6f9ded5",
+    "description" : "青少年无人机大赛小程序",
     "versionName" : "1.0.0",
     "versionCode" : "100",
     "transformPx" : false,
@@ -35,7 +35,7 @@
     },
     "quickapp" : {},
     "mp-weixin" : {
-        "appid" : "wx6136df91e6f9ded5",
+        "appid" : "wxd1c8a7ec22853545",
         "setting" : {
             "urlCheck" : false
         },

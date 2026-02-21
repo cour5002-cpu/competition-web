@@ -96,7 +96,7 @@ export default {
 <style scoped>
 .container {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -106,10 +106,10 @@ export default {
 
 .card {
   width: 100%;
-  background-color: #fff;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 20px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow);
   box-sizing: border-box;
 }
 
@@ -117,7 +117,7 @@ export default {
   display: block;
   font-size: 20px;
   font-weight: bold;
-  color: #333;
+  color: var(--text);
   margin-bottom: 18px;
   text-align: center;
 }
@@ -129,14 +129,14 @@ export default {
 .label {
   display: block;
   font-size: 14px;
-  color: #333;
+  color: rgba(15, 23, 42, 0.72);
   margin-bottom: 8px;
 }
 
 .input {
   width: 100%;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   height: 44px;
   line-height: 44px;
   padding: 0 12px;
@@ -147,16 +147,16 @@ export default {
 
 .btn {
   margin-top: 10px;
-  background-color: #007aff;
+  background-color: var(--brand);
   color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .btn-secondary {
   margin-top: 10px;
   background-color: transparent;
-  color: #007aff;
-  border: 1px solid #007aff;
-  border-radius: 8px;
+  color: var(--brand);
+  border: 1px solid rgba(31, 75, 153, 0.55);
+  border-radius: 12px;
 }
 </style>

@@ -57,7 +57,7 @@ export default {
   async onShow() {
     const token = String(uni.getStorageSync('admin_token') || '').trim()
     if (!token) {
-      uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+      uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
       return
     }
   },
@@ -97,7 +97,7 @@ export default {
       if (!this.filePath) return
       const token = String(uni.getStorageSync('admin_token') || '').trim()
       if (!token) {
-        uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+        uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
         return
       }
 
@@ -146,7 +146,7 @@ export default {
       if (!this.result || !this.result.import_log_id) return
       const token = String(uni.getStorageSync('admin_token') || '').trim()
       if (!token) {
-        uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+        uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
         return
       }
 
@@ -184,17 +184,18 @@ export default {
 <style scoped>
 .container {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   padding: 20px;
   box-sizing: border-box;
 }
 
 .header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, rgba(31, 75, 153, 1) 0%, rgba(14, 165, 164, 1) 100%);
   border-radius: 12px;
   padding: 20px;
   color: #fff;
   margin-bottom: 15px;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
 }
 
 .title {
@@ -211,10 +212,10 @@ export default {
 }
 
 .card {
-  background-color: #fff;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 16px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow);
 }
 
 .file-row {
@@ -225,14 +226,14 @@ export default {
 
 .label {
   width: 60px;
-  color: #666;
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .file-name {
   flex: 1;
   font-size: 14px;
-  color: #111827;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -245,23 +246,25 @@ export default {
 
 .btn {
   flex: 1;
-  background-color: #007aff;
+  background-color: var(--brand);
   color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
+  font-weight: 600;
 }
 
 .btn-secondary {
   flex: 1;
   background-color: transparent;
-  color: #007aff;
-  border: 1px solid #007aff;
-  border-radius: 8px;
+  color: var(--brand);
+  border: 1px solid rgba(31, 75, 153, 0.55);
+  border-radius: 12px;
+  font-weight: 600;
 }
 
 .result {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 .result-title {
@@ -269,13 +272,13 @@ export default {
   font-size: 14px;
   font-weight: bold;
   margin-bottom: 8px;
-  color: #111827;
+  color: var(--text);
 }
 
 .result-line {
   display: block;
   font-size: 14px;
-  color: #374151;
+  color: rgba(15, 23, 42, 0.78);
   margin-bottom: 4px;
 }
 

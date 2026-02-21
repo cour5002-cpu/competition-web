@@ -30,7 +30,7 @@
         <button class="btn-secondary" @click="resetFilters">重置</button>
       </view>
 
-      <view class="btn-row" style="margin-top: 8px;">
+      <view class="btn-row btn-row-gap">
         <button class="btn" @click="exportExcel">导出当前筛选Excel</button>
       </view>
     </view>
@@ -56,7 +56,8 @@
     </view>
 
     <view v-else class="empty">
-      <text>暂无数据</text>
+      <image class="empty-icon" :src="emptyIcon" mode="aspectFit"></image>
+      <text class="empty-text">暂无数据</text>
     </view>
   </view>
 </template>
@@ -69,6 +70,7 @@ const BASE_URL = requestApi && requestApi.BASE_URL ? requestApi.BASE_URL : ''
 
 export default {
   data() {
+    const emptySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="rgba(15, 23, 42, 0.55)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12"/><path d="M7 8l1 12h8l1-12"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M9.5 13.2h.01"/><path d="M14.5 13.2h.01"/><path d="M9.5 16.5c1.5 1.2 3.5 1.2 5 0"/></svg>`
     return {
       statusLabels: ['全部', '待审核', '已通过', '已退回'],
       statusValues: ['', 'pending', 'approved', 'rejected'],
@@ -83,14 +85,15 @@ export default {
       total: 0,
       pages: 1,
       items: [],
-      loading: false
+      loading: false,
+      emptyIcon: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(emptySvg)}`
     }
   },
 
   async onShow() {
     const token = String(uni.getStorageSync('admin_token') || '').trim()
     if (!token) {
-      uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+      uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
       return
     }
     this.doSearch(true)
@@ -144,7 +147,7 @@ export default {
       if (this.loading) return
       const token = String(uni.getStorageSync('admin_token') || '').trim()
       if (!token) {
-        uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+        uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
         return
       }
 
@@ -202,7 +205,7 @@ export default {
     exportExcel() {
       const token = String(uni.getStorageSync('admin_token') || '').trim()
       if (!token) {
-        uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+        uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
         return
       }
 
@@ -245,16 +248,17 @@ export default {
 <style scoped>
 .container {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--bg);
   padding: 16px;
   box-sizing: border-box;
 }
 
 .card {
-  background-color: #fff;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 14px;
   margin-bottom: 12px;
+  box-shadow: var(--shadow);
 }
 
 .row {
@@ -265,34 +269,37 @@ export default {
 
 .label {
   width: 60px;
-  font-size: 14px;
-  color: #333;
+  font-size: 13px;
+  color: rgba(15, 23, 42, 0.72);
 }
 
 .picker {
   flex: 1;
-  border: 1px solid #eee;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   height: 40px;
   display: flex;
   align-items: center;
   padding: 0 10px;
+  background: #fff;
 }
 
 .picker-text {
   width: 100%;
   font-size: 14px;
-  color: #333;
+  color: var(--text);
 }
 
 .input {
   flex: 1;
-  border: 1px solid #eee;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   height: 40px;
   padding: 0 10px;
   box-sizing: border-box;
   font-size: 14px;
+  background: #fff;
+  color: var(--text);
 }
 
 .btn-row {
@@ -300,31 +307,39 @@ export default {
   gap: 10px;
 }
 
+.btn-row-gap {
+  margin-top: 8px;
+}
+
 .btn {
   flex: 1;
-  background-color: #007aff;
+  background-color: var(--brand);
   color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
   height: 40px;
   line-height: 40px;
   font-size: 14px;
+  font-weight: 600;
 }
 
 .btn-secondary {
   flex: 1;
-  background-color: #f0f0f0;
-  color: #333;
-  border-radius: 8px;
+  background-color: transparent;
+  color: var(--brand);
+  border: 1px solid rgba(31, 75, 153, 0.55);
+  border-radius: 12px;
   height: 40px;
   line-height: 40px;
   font-size: 14px;
+  font-weight: 600;
 }
 
 .list .item {
-  background-color: #fff;
-  border-radius: 12px;
+  background-color: var(--card);
+  border-radius: 14px;
   padding: 14px;
   margin-bottom: 10px;
+  box-shadow: var(--shadow);
 }
 
 .item-head {
@@ -336,7 +351,7 @@ export default {
 .title {
   font-size: 15px;
   font-weight: 600;
-  color: #111;
+  color: var(--text);
 }
 
 .badge {
@@ -346,10 +361,10 @@ export default {
   color: #fff;
 }
 
-.b-pending { background-color: #ff9500; }
-.b-approved { background-color: #34c759; }
-.b-rejected { background-color: #ff3b30; }
-.b-default { background-color: #8e8e93; }
+.b-pending { background-color: #f59e0b; }
+.b-approved { background-color: #0ea5a4; }
+.b-rejected { background-color: #ef4444; }
+.b-default { background-color: rgba(15, 23, 42, 0.45); }
 
 .meta {
   margin-top: 8px;
@@ -358,7 +373,7 @@ export default {
 .meta-line {
   display: block;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   margin-top: 4px;
 }
 
@@ -371,12 +386,24 @@ export default {
 
 .page-info {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
 }
 
 .empty {
-  margin-top: 40px;
+  margin-top: 50px;
   text-align: center;
-  color: #999;
+  color: var(--muted);
+  padding: 12px 0;
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 12px;
+}
+
+.empty-text {
+  display: block;
+  font-size: 13px;
 }
 </style>
