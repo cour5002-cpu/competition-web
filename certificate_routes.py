@@ -151,6 +151,8 @@ def generate_certificate(application_id):
 
         # Student stamps (final): always inject 6 stamps at the bottom.
         # Do NOT depend on a specific background_image value, because templates may vary.
+        # IMPORTANT: Do NOT override the template coordinate system (coord_unit/y_origin).
+        # Otherwise mm-based templates will render texts off-page and appear as "no text".
         try:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             bg_rel = str((template_config or {}).get('background_image', '') or '').strip()
@@ -178,10 +180,6 @@ def generate_certificate(application_id):
 
             template_config = dict(template_config or {})
             template_config.update({
-                'use_background_size': True,
-                'coord_unit': 'px',
-                'y_origin': 'top',
-                'global_y_offset': 0,
                 'stamp_images': _build_centered_stamp_images(
                     cert_kind='player',
                     count=stamp_count,
