@@ -149,81 +149,53 @@ def generate_certificate(application_id):
                 'message': err
             }), 404
 
-        # Ensure player certificate keeps the native PNG aspect ratio (horizontal) and uses
-        # the confirmed pixel coordinates (top-origin) to avoid A4 stretching.
+        # Student stamps (final): always inject 6 stamps at the bottom.
+        # Do NOT depend on a specific background_image value, because templates may vary.
         try:
-            bg = str((template_config or {}).get('background_image', '') or '').strip()
-            if bg == 'assets/cert/player.png':
-                bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'player.png')
-                bg_w, _bg_h = Image.open(bg_abs).size
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            bg_rel = str((template_config or {}).get('background_image', '') or '').strip()
+            bg_abs = ''
+            if bg_rel and (not os.path.isabs(bg_rel)):
+                bg_abs = os.path.join(base_dir, bg_rel)
+            elif bg_rel:
+                bg_abs = bg_rel
 
-                stamp_count = 6
-                stamp_margin = 80
-                stamp_gap = 30
+            bg_w = None
+            if bg_abs and os.path.exists(bg_abs):
+                try:
+                    bg_w, _bg_h = Image.open(bg_abs).size
+                except Exception:
+                    bg_w = None
+
+            stamp_count = 6
+            stamp_margin = 80
+            stamp_gap = 30
+            if bg_w:
                 stamp_w = max(60, int((int(bg_w) - 2 * stamp_margin - stamp_gap * (stamp_count - 1)) / stamp_count))
-                template_config = dict(template_config or {})
-                template_config.update({
-                    'use_background_size': True,
-                    'coord_unit': 'px',
-                    'y_origin': 'top',
-                    'global_y_offset': 0,
-                    'stamp_images': _build_centered_stamp_images(
-                        cert_kind='player',
-                        count=stamp_count,
-                        width=stamp_w,
-                        height=stamp_w,
-                        gap=stamp_gap,
-                        # y measured from bottom (final)
-                        y=140,
-                        unit='px',
-                        y_origin='bottom',
-                        y_anchor='center',
-                        keep_aspect=True,
-                        dx=68,
-                    ),
-                    'texts': [
-                        {
-                            'field': 'participants_names',
-                            'font': '宋体',
-                            'font_size': 24,
-                            'align': 'center',
-                            'width': 1262,
-                            'x': 0,
-                            'x_anchor': 'left',
-                            'y': 400,
-                        },
-                        {
-                            'field': 'category',
-                            'font': '宋体',
-                            'font_size': 24,
-                            'align': 'center',
-                            'width': 180,
-                            'x': 680,
-                            'x_anchor': 'left',
-                            'y': 470,
-                        },
-                        {
-                            'field': 'education_level',
-                            'font': '宋体',
-                            'font_size': 24,
-                            'align': 'center',
-                            'width': 140,
-                            'x': 920,
-                            'x_anchor': 'left',
-                            'y': 470,
-                        },
-                        {
-                            'field': 'award_level',
-                            'font': '华文楷体',
-                            'font_size': 84,
-                            'align': 'center',
-                            'width': 1262,
-                            'x': 0,
-                            'x_anchor': 'left',
-                            'y': 590,
-                        },
-                    ]
-                })
+            else:
+                # Safe fallback when background image is unknown/unreadable.
+                stamp_w = 120
+
+            template_config = dict(template_config or {})
+            template_config.update({
+                'use_background_size': True,
+                'coord_unit': 'px',
+                'y_origin': 'top',
+                'global_y_offset': 0,
+                'stamp_images': _build_centered_stamp_images(
+                    cert_kind='player',
+                    count=stamp_count,
+                    width=stamp_w,
+                    height=stamp_w,
+                    gap=stamp_gap,
+                    y=140,
+                    unit='px',
+                    y_origin='bottom',
+                    y_anchor='center',
+                    keep_aspect=True,
+                    dx=68,
+                ),
+            })
         except Exception:
             pass
         
