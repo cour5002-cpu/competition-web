@@ -15,6 +15,59 @@ from admin_auth import require_admin
 admin_bp = Blueprint('admin', __name__)
 
 
+def _stamp_slot_path(*, cert_kind: str, slot_index: int) -> str:
+    cert_kind = str(cert_kind or '').strip().lower()
+    slot_index = int(slot_index or 0)
+    if cert_kind not in ('player', 'coach'):
+        return ''
+    if slot_index < 1 or slot_index > 6:
+        return ''
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, 'assets', 'cert', 'stamps', cert_kind, f'{slot_index}.png')
+
+
+def _ensure_parent_dir(fp: str):
+    try:
+        d = os.path.dirname(fp)
+        if d:
+            os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+
+
+@admin_bp.route('/api/admin/stamps/<string:cert_kind>/<int:slot_index>', methods=['GET'])
+@require_admin()
+def admin_get_stamp(cert_kind: str, slot_index: int):
+    fp = _stamp_slot_path(cert_kind=cert_kind, slot_index=slot_index)
+    if not fp or (not os.path.exists(fp)):
+        return jsonify({'success': False, 'message': '未找到盖章文件'}), 404
+    return send_file(fp, mimetype='image/png')
+
+
+@admin_bp.route('/api/admin/stamps/<string:cert_kind>/<int:slot_index>', methods=['POST'])
+@require_admin()
+def admin_upload_stamp(cert_kind: str, slot_index: int):
+    fp = _stamp_slot_path(cert_kind=cert_kind, slot_index=slot_index)
+    if not fp:
+        return jsonify({'success': False, 'message': '参数错误'}), 400
+
+    f = request.files.get('file')
+    if not f:
+        return jsonify({'success': False, 'message': '缺少上传文件 file'}), 400
+
+    try:
+        _ensure_parent_dir(fp)
+        if os.path.exists(fp):
+            try:
+                os.remove(fp)
+            except Exception:
+                pass
+        f.save(fp)
+        return jsonify({'success': True, 'message': '上传成功', 'path': f'assets/cert/stamps/{str(cert_kind).strip().lower()}/{slot_index}.png'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 _WX_ACCESS_TOKEN_CACHE = {
     'token': '',
     'expires_at_ts': 0
@@ -84,7 +137,7 @@ def _wx_send_audit_subscribe(openid: str, status_text: str, reviewed_at_dt, reas
 
         template_id = str(os.environ.get('WX_SUBSCRIBE_AUDIT_TEMPLATE_ID', '') or '').strip()
         if not template_id:
-            template_id = 'MLzBV8JrWuRq9GkSzFpn0QNqQ-QodN_QQR9MCaMk7M8'
+            template_id = 'a1s7ioFW5JEliylSx1hGJSd35x01NrKTFadK54XnuHY'
 
         tok = _wx_get_access_token()
         if not tok.get('success'):
@@ -834,12 +887,69 @@ def _is_blank_text(s):
     low = txt.lower()
     return low in ['nan', 'none', 'null', 'undefined']
 
+
+def _make_template_excel(columns: list[str], sample_rows: list[dict] | None = None, sheet_name: str = '模板'):
+    df = pd.DataFrame(sample_rows or [], columns=columns)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+    output.seek(0)
+    return output
+
+
+@admin_bp.route('/api/admin/download-template/match-no', methods=['GET'])
+@require_admin()
+def admin_download_template_match_no():
+    output = _make_template_excel(
+        ['参赛号', '手机号'],
+        sample_rows=[{'参赛号': 'A001', '手机号': '13800138000'}],
+        sheet_name='参赛号导入模板'
+    )
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='参赛号导入模板.xlsx'
+    )
+
+
+@admin_bp.route('/api/admin/download-template/awards', methods=['GET'])
+@require_admin()
+def admin_download_template_awards():
+    output = _make_template_excel(
+        ['参赛号', '获奖等级'],
+        sample_rows=[{'参赛号': 'A001', '获奖等级': '一等奖'}],
+        sheet_name='获奖导入模板'
+    )
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='获奖导入模板.xlsx'
+    )
+
+
+@admin_bp.route('/api/admin/download-template/excellent-coaches', methods=['GET'])
+@require_admin()
+def admin_download_template_excellent_coaches():
+    output = _make_template_excel(
+        ['指导老师姓名', '指导老师电话'],
+        sample_rows=[{'指导老师姓名': '张三', '指导老师电话': '13800138000'}],
+        sheet_name='优秀辅导员导入模板'
+    )
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='优秀辅导员导入模板.xlsx'
+    )
+
 @admin_bp.route('/api/admin/import-match-no', methods=['POST'])
 @require_admin()
 def import_match_no():
     """参赛号导入接口"""
     try:
-        from models import Application, ApplicationParticipant, ImportLog
+        from models import Application, ImportLog
         from app import db
         
         if 'file' not in request.files:
@@ -884,22 +994,11 @@ def import_match_no():
                 'message': 'Excel文件缺少必要的列: 参赛号'
             }), 400
 
-        id_col = None
-        for col in ['报名ID', '申请ID', 'application_id']:
-            if col in df.columns:
-                id_col = col
-                break
-
         phone_col = _pick_col(['手机号', '选手手机号', '参赛人手机号', '参赛手机号', '电话', '手机'])
-        name_col = _pick_col(['姓名', '选手姓名', '学生姓名'])
-        school_col = _pick_col(['学校', '学校名称', '学校名'])
-
-        has_phone = phone_col is not None
-        has_name_school = (name_col is not None) and (school_col is not None)
-        if (id_col is None) and (not has_phone) and (not has_name_school):
+        if not phone_col:
             return jsonify({
                 'success': False,
-                'message': 'Excel文件缺少必要的列: 手机号 或 (姓名, 学校)'
+                'message': 'Excel文件缺少必要的列: 手机号'
             }), 400
         
         total_count = len(df)
@@ -914,17 +1013,13 @@ def import_match_no():
         # 逐行处理
         for index, row in df.iterrows():
             try:
-                raw_id = row.get(id_col, '') if id_col is not None else ''
-
                 match_no = _cell_to_str(row.get(match_no_col, ''))
+                phone = _cell_to_str(row.get(phone_col, ''))
 
                 if _is_blank_text(match_no):
                     error_data.append({
                         '行号': index + 2,  # Excel行号从2开始
-                        '报名ID': raw_id,
-                        '姓名': row.get(name_col, '') if name_col else row.get('姓名', ''),
-                        '学校': row.get(school_col, '') if school_col else row.get('学校', ''),
-                        '手机号': row.get(phone_col, '') if phone_col else row.get('手机号', ''),
+                        '手机号': phone,
                         '参赛号': match_no,
                         '错误原因': '参赛号为空'
                     })
@@ -935,9 +1030,7 @@ def import_match_no():
                 if match_no in seen_match_no:
                     error_data.append({
                         '行号': index + 2,
-                        '姓名': row.get(name_col, '') if name_col else row.get('姓名', ''),
-                        '学校': row.get(school_col, '') if school_col else row.get('学校', ''),
-                        '手机号': row.get(phone_col, '') if phone_col else row.get('手机号', ''),
+                        '手机号': phone,
                         '参赛号': match_no,
                         '错误原因': '参赛号在本次导入文件中重复'
                     })
@@ -946,42 +1039,25 @@ def import_match_no():
 
                 seen_match_no.add(match_no)
 
-                application = None
+                if _is_blank_text(phone):
+                    error_data.append({
+                        '行号': index + 2,
+                        '手机号': phone,
+                        '参赛号': match_no,
+                        '错误原因': '手机号为空'
+                    })
+                    failed_count += 1
+                    continue
 
-                if id_col is not None:
-                    if raw_id is not None and str(raw_id).strip() != '':
-                        try:
-                            application_id = int(raw_id)
-                            application = Application.query.get(application_id)
-                        except Exception:
-                            application = None
-
-                if has_phone:
-                    phone = str(row.get(phone_col, '')).strip() if phone_col else ''
-                    if phone:
-                        phone_hash = hashlib.sha256(phone.encode()).hexdigest()
-                        application = Application.query.filter(
-                            Application.contact_phone_hash == phone_hash
-                        ).order_by(Application.created_at.desc()).first()
-
-                if (application is None) and has_name_school:
-                    participant_name = str(row.get(name_col, '')).strip() if name_col else ''
-                    school_name = str(row.get(school_col, '')).strip() if school_col else ''
-
-                    if participant_name and school_name:
-                        participant = ApplicationParticipant.query.join(Application).filter(
-                            ApplicationParticipant.participant_name == participant_name,
-                            Application.school_name == school_name
-                        ).order_by(Application.created_at.desc()).first()
-                        if participant:
-                            application = participant.application
+                phone_hash = hashlib.sha256(phone.encode()).hexdigest()
+                application = Application.query.filter(
+                    Application.contact_phone_hash == phone_hash
+                ).order_by(Application.created_at.desc()).first()
 
                 if application is None:
                     error_data.append({
                         '行号': index + 2,
-                        '姓名': row.get(name_col, '') if name_col else row.get('姓名', ''),
-                        '学校': row.get(school_col, '') if school_col else row.get('学校', ''),
-                        '手机号': row.get(phone_col, '') if phone_col else row.get('手机号', ''),
+                        '手机号': phone,
                         '参赛号': match_no,
                         '错误原因': '未找到匹配的报名记录'
                     })
@@ -991,9 +1067,7 @@ def import_match_no():
                 if getattr(application, 'status', None) == 'rejected':
                     error_data.append({
                         '行号': index + 2,
-                        '姓名': row.get(name_col, '') if name_col else row.get('姓名', ''),
-                        '学校': row.get(school_col, '') if school_col else row.get('学校', ''),
-                        '手机号': row.get(phone_col, '') if phone_col else row.get('手机号', ''),
+                        '手机号': phone,
                         '参赛号': match_no,
                         '错误原因': '该报名已退回(rejected)，不分配参赛号'
                     })
@@ -1005,9 +1079,7 @@ def import_match_no():
                 if existing and getattr(existing, 'id', None) != getattr(application, 'id', None):
                     error_data.append({
                         '行号': index + 2,
-                        '姓名': row.get(name_col, '') if name_col else row.get('姓名', ''),
-                        '学校': row.get(school_col, '') if school_col else row.get('学校', ''),
-                        '手机号': row.get(phone_col, '') if phone_col else row.get('手机号', ''),
+                        '手机号': phone,
                         '参赛号': match_no,
                         '错误原因': f'参赛号已被其他报名占用(报名ID={existing.id})'
                     })
@@ -1021,8 +1093,7 @@ def import_match_no():
             except Exception as e:
                 error_data.append({
                     '行号': index + 2,
-                    '姓名': row.get(name_col, '') if name_col else row.get('姓名', ''),
-                    '学校': row.get(school_col, '') if school_col else row.get('学校', ''),
+                    '手机号': row.get(phone_col, '') if phone_col else row.get('手机号', ''),
                     '参赛号': row.get(match_no_col, ''),
                     '错误原因': f'处理异常: {str(e)}'
                 })

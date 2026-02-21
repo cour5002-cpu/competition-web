@@ -121,6 +121,38 @@ class CertificateGenerator:
         finally:
             canvas_obj.restoreState()
 
+    def draw_debug_grid_overlay(self, canvas_obj, config: dict):
+        try:
+            fine_step = float((config or {}).get('fine_step_px', 10) or 10)
+            main_step = float((config or {}).get('main_step_px', 50) or 50)
+            fine_alpha = float((config or {}).get('fine_alpha', 0.18) or 0.18)
+            main_alpha = float((config or {}).get('main_alpha', 0.45) or 0.45)
+            fine_lw = float((config or {}).get('fine_line_width', 0.35) or 0.35)
+            main_lw = float((config or {}).get('main_line_width', 0.8) or 0.8)
+            label_fs = float((config or {}).get('label_font_size', 7) or 7)
+        except Exception:
+            fine_step, main_step = 10, 50
+            fine_alpha, main_alpha = 0.18, 0.45
+            fine_lw, main_lw = 0.35, 0.8
+            label_fs = 7
+
+        self.draw_debug_grid(
+            canvas_obj,
+            step_px=fine_step,
+            color=Color(0.2, 0.2, 0.2, alpha=fine_alpha),
+            line_width=fine_lw,
+            label=False,
+            label_font_size=label_fs,
+        )
+        self.draw_debug_grid(
+            canvas_obj,
+            step_px=main_step,
+            color=Color(0.15, 0.15, 0.15, alpha=main_alpha),
+            line_width=main_lw,
+            label=True,
+            label_font_size=label_fs,
+        )
+
     def draw_debug_point(self, canvas_obj, x, y, radius=3.0, color=None, label=None, label_font_size=7):
         canvas_obj.saveState()
         try:
@@ -223,15 +255,74 @@ class CertificateGenerator:
         font_size = float(font_size)
         canvas_obj.setFont(font_name, font_size)
 
+        def _get_char_space_pt() -> float:
+            try:
+                # reportlab stores this on canvas as a private attr
+                for k in ('_charSpace', 'charSpace'):
+                    v = getattr(canvas_obj, k, None)
+                    if v is not None:
+                        return float(v)
+            except Exception:
+                pass
+            return 0.0
+
+        def _effective_text_width(t: str) -> float:
+            base = float(canvas_obj.stringWidth(t, font_name, font_size))
+            cs = _get_char_space_pt()
+            n = len(t) if isinstance(t, str) else 0
+            if n <= 1 or cs == 0:
+                return base
+            return base + cs * float(n - 1)
+
+        def _draw_text_with_glyph_dx(*, t: str, x0: float, y0: float, box_w: float, a: str, glyph_dx_pt: dict):
+            cs = _get_char_space_pt()
+            chars = list(t)
+            if not chars:
+                return
+
+            # base (unshifted) text width includes char spacing
+            base_w = 0.0
+            for idx, ch in enumerate(chars):
+                base_w += float(canvas_obj.stringWidth(ch, font_name, font_size))
+                if idx < len(chars) - 1:
+                    base_w += cs
+
+            if a == 'left':
+                start_shift = 0.0
+            elif a == 'right':
+                start_shift = float(box_w) - float(base_w)
+            else:
+                start_shift = (float(box_w) - float(base_w)) / 2.0
+
+            adv = 0.0
+            for idx, ch in enumerate(chars):
+                dx = float(glyph_dx_pt.get(ch, 0.0) or 0.0)
+                canvas_obj.drawString(float(x0) + float(start_shift) + float(adv) + float(dx), float(y0), ch)
+                adv += float(canvas_obj.stringWidth(ch, font_name, font_size))
+                if idx < len(chars) - 1:
+                    adv += cs
+
+        glyph_dx = getattr(self, '_current_glyph_dx', None)
+        if isinstance(glyph_dx, dict) and glyph_dx:
+            _draw_text_with_glyph_dx(
+                t=text,
+                x0=float(x),
+                y0=float(y),
+                box_w=float(width),
+                a=str(align or 'center'),
+                glyph_dx_pt=glyph_dx,
+            )
+            return
+
         if align == 'left':
             canvas_obj.drawString(x, y, text)
             return
         if align == 'right':
-            text_width = canvas_obj.stringWidth(text, font_name, font_size)
+            text_width = _effective_text_width(text)
             canvas_obj.drawString(x + width - text_width, y, text)
             return
 
-        text_width = canvas_obj.stringWidth(text, font_name, font_size)
+        text_width = _effective_text_width(text)
         centered_x = x + (width - text_width) / 2
         canvas_obj.drawString(centered_x, y, text)
 
@@ -246,6 +337,24 @@ class CertificateGenerator:
 
         canvas_obj.setFont(font_name, font_size)
 
+        def _get_char_space_pt() -> float:
+            try:
+                for k in ('_charSpace', 'charSpace'):
+                    v = getattr(canvas_obj, k, None)
+                    if v is not None:
+                        return float(v)
+            except Exception:
+                pass
+            return 0.0
+
+        def _effective_text_width(t: str) -> float:
+            base = float(canvas_obj.stringWidth(t, font_name, font_size))
+            cs = _get_char_space_pt()
+            n = len(t) if isinstance(t, str) else 0
+            if n <= 1 or cs == 0:
+                return base
+            return base + cs * float(n - 1)
+
         tokens, joiner = self._split_wrap_tokens(text)
         if not tokens:
             return
@@ -254,7 +363,7 @@ class CertificateGenerator:
         current = ''
         for token in tokens:
             candidate = token if not current else f"{current}{joiner}{token}"
-            if canvas_obj.stringWidth(candidate, font_name, font_size) <= width:
+            if _effective_text_width(candidate) <= width:
                 current = candidate
             else:
                 if current:
@@ -378,51 +487,187 @@ class CertificateGenerator:
 
             # Optional stamp overlay
             try:
-                stamp_image = template_config.get('stamp_image')
-                if stamp_image:
-                    base_dir = os.path.dirname(os.path.abspath(__file__))
-                    stamp_path = os.path.join(base_dir, stamp_image) if not os.path.isabs(str(stamp_image)) else str(stamp_image)
-                    if os.path.exists(stamp_path):
-                        coord_unit = str(template_config.get('coord_unit', 'mm') or 'mm').lower()
-                        y_origin = str(template_config.get('y_origin', 'bottom') or 'bottom').lower()
+                coord_unit = str(template_config.get('coord_unit', 'mm') or 'mm').lower()
+                y_origin = str(template_config.get('y_origin', 'bottom') or 'bottom').lower()
 
-                        def _to_pt(v):
+                def _to_pt(v):
+                    if v is None:
+                        return 0.0
+                    if coord_unit == 'px':
+                        return float(self.px_to_pt(v))
+                    return float(v) * mm
+
+                def _resolve_path(p):
+                    if not p:
+                        return ''
+                    base_dir = os.path.dirname(os.path.abspath(__file__))
+                    return os.path.join(base_dir, p) if not os.path.isabs(str(p)) else str(p)
+
+                def _draw_one_stamp(*, path, x, y, width_pt=None, height_pt=None, y_anchor='bottom', keep_aspect=False):
+                    stamp_path = _resolve_path(path)
+                    if not stamp_path or not os.path.exists(stamp_path):
+                        return
+
+                    stamp_img = ImageReader(stamp_path)
+                    w_pt = width_pt
+                    h_pt = height_pt
+                    if w_pt is None or h_pt is None:
+                        iw_px, ih_px = stamp_img.getSize()
+                        if w_pt is None:
+                            w_pt = self.px_to_pt(iw_px)
+                        if h_pt is None:
+                            h_pt = self.px_to_pt(ih_px)
+
+                    draw_w_pt = float(w_pt)
+                    draw_h_pt = float(h_pt)
+                    draw_x = float(x)
+                    y_anchor = str(y_anchor or 'bottom').lower()
+                    if keep_aspect and width_pt is not None and height_pt is not None:
+                        try:
+                            iw_px, ih_px = stamp_img.getSize()
+                            iw_pt = float(self.px_to_pt(iw_px))
+                            ih_pt = float(self.px_to_pt(ih_px))
+                            if iw_pt > 0 and ih_pt > 0 and float(w_pt) > 0 and float(h_pt) > 0:
+                                s = min(float(w_pt) / iw_pt, float(h_pt) / ih_pt)
+                                draw_w_pt = iw_pt * s
+                                draw_h_pt = ih_pt * s
+                        except Exception:
+                            draw_w_pt = float(w_pt)
+                            draw_h_pt = float(h_pt)
+
+                        if y_anchor == 'center':
+                            box_bottom = float(y) - float(h_pt) / 2.0
+                        else:
+                            box_bottom = float(y)
+
+                        draw_x = float(x) + (float(w_pt) - float(draw_w_pt)) / 2.0
+                        sy = box_bottom + (float(h_pt) - float(draw_h_pt)) / 2.0
+                        canvas_obj.drawImage(stamp_img, float(draw_x), float(sy), width=float(draw_w_pt), height=float(draw_h_pt), mask='auto')
+                        return
+
+                    sy = float(y)
+                    if y_anchor == 'center':
+                        sy = sy - float(h_pt) / 2.0
+
+                    canvas_obj.drawImage(stamp_img, float(x), float(sy), width=float(w_pt), height=float(h_pt), mask='auto')
+
+                # 1) New: stamp_repeat (centered symmetric)
+                stamp_repeat = template_config.get('stamp_repeat') or None
+                if isinstance(stamp_repeat, dict) and stamp_repeat.get('image'):
+                    local_unit = str(stamp_repeat.get('unit', coord_unit) or coord_unit).lower()
+                    local_y_origin = str(stamp_repeat.get('y_origin', y_origin) or y_origin).lower()
+
+                    def _to_pt_local(v):
+                        if v is None:
+                            return 0.0
+                        if local_unit == 'px':
+                            return float(self.px_to_pt(v))
+                        return float(v) * mm
+
+                    count = int(stamp_repeat.get('count', 1) or 1)
+                    count = max(1, min(count, 20))
+
+                    sw = stamp_repeat.get('width', template_config.get('stamp_width'))
+                    sh = stamp_repeat.get('height', template_config.get('stamp_height'))
+                    sw_pt = _to_pt_local(sw) if sw is not None else None
+                    sh_pt = _to_pt_local(sh) if sh is not None else None
+
+                    gap = stamp_repeat.get('gap', 0)
+                    gap_pt = _to_pt_local(gap) if gap is not None else 0.0
+
+                    sy_raw = float(stamp_repeat.get('y', template_config.get('stamp_y', 0)) or 0)
+                    sy_anchor = str(stamp_repeat.get('y_anchor', template_config.get('stamp_y_anchor', 'bottom')) or 'bottom').lower()
+                    if local_unit == 'px' and local_y_origin == 'top':
+                        sy = self._px_top_to_pt_bottom(sy_raw, self.page_height)
+                    else:
+                        sy = _to_pt_local(sy_raw)
+
+                    total_w = (float(sw_pt or 0) * count) + (float(gap_pt) * (count - 1))
+                    start_x = (float(self.page_width) - float(total_w)) / 2.0
+
+                    for i in range(count):
+                        sx = start_x + i * (float(sw_pt or 0) + float(gap_pt))
+                        keep_aspect = bool(stamp_repeat.get('keep_aspect') or template_config.get('stamp_keep_aspect'))
+                        _draw_one_stamp(
+                            path=stamp_repeat.get('image'),
+                            x=sx,
+                            y=sy,
+                            width_pt=sw_pt,
+                            height_pt=sh_pt,
+                            y_anchor=sy_anchor
+                            , keep_aspect=keep_aspect
+                        )
+
+                # 2) New: stamp_images list (each item may have own x/y)
+                stamp_images = template_config.get('stamp_images')
+                if isinstance(stamp_images, list) and stamp_images:
+                    for item in stamp_images:
+                        if isinstance(item, str):
+                            item = {'image': item}
+                        if not isinstance(item, dict):
+                            continue
+                        img = item.get('image') or item.get('path')
+                        if not img:
+                            continue
+
+                        local_unit = str(item.get('unit', coord_unit) or coord_unit).lower()
+                        local_y_origin = str(item.get('y_origin', y_origin) or y_origin).lower()
+
+                        def _to_pt_local(v):
                             if v is None:
                                 return 0.0
-                            if coord_unit == 'px':
+                            if local_unit == 'px':
                                 return float(self.px_to_pt(v))
                             return float(v) * mm
 
-                        sw = template_config.get('stamp_width')
-                        sh = template_config.get('stamp_height')
-                        stamp_img = ImageReader(stamp_path)
-                        sw_pt = _to_pt(sw) if sw is not None else None
-                        sh_pt = _to_pt(sh) if sh is not None else None
-                        if sw_pt is None or sh_pt is None:
-                            iw_px, ih_px = stamp_img.getSize()
-                            sw_pt = sw_pt if sw_pt is not None else self.px_to_pt(iw_px)
-                            sh_pt = sh_pt if sh_pt is not None else self.px_to_pt(ih_px)
+                        sw = item.get('width', template_config.get('stamp_width'))
+                        sh = item.get('height', template_config.get('stamp_height'))
+                        sw_pt = _to_pt_local(sw) if sw is not None else None
+                        sh_pt = _to_pt_local(sh) if sh is not None else None
 
-                        # X position
-                        stamp_center_x = bool(template_config.get('stamp_center_x'))
+                        stamp_center_x = bool(item.get('center_x', template_config.get('stamp_center_x')))
                         if stamp_center_x:
-                            sx = (float(self.page_width) - float(sw_pt)) / 2.0
+                            # When center_x is enabled, allow item.x to act as an offset from center.
+                            # This is required for centered-symmetric multi-stamp layouts.
+                            base_sx = (float(self.page_width) - float(sw_pt or 0)) / 2.0
+                            dx = _to_pt_local(item.get('x', 0))
+                            sx = float(base_sx) + float(dx)
                         else:
-                            sx = _to_pt(template_config.get('stamp_x', 0))
+                            sx = _to_pt_local(item.get('x', template_config.get('stamp_x', 0)))
 
-                        # Y position
-                        sy_raw = float(template_config.get('stamp_y', 0) or 0)
-                        sy_anchor = str(template_config.get('stamp_y_anchor', 'bottom') or 'bottom').lower()
-                        if coord_unit == 'px' and y_origin == 'top':
+                        sy_raw = float(item.get('y', template_config.get('stamp_y', 0)) or 0)
+                        sy_anchor = str(item.get('y_anchor', template_config.get('stamp_y_anchor', 'bottom')) or 'bottom').lower()
+                        if local_unit == 'px' and local_y_origin == 'top':
                             sy = self._px_top_to_pt_bottom(sy_raw, self.page_height)
                         else:
-                            sy = _to_pt(sy_raw)
+                            sy = _to_pt_local(sy_raw)
 
-                        # If stamp_y is a centerline, shift down by half height
-                        if sy_anchor == 'center':
-                            sy = float(sy) - float(sh_pt) / 2.0
+                        keep_aspect = bool(item.get('keep_aspect') or template_config.get('stamp_keep_aspect'))
+                        _draw_one_stamp(path=img, x=sx, y=sy, width_pt=sw_pt, height_pt=sh_pt, y_anchor=sy_anchor, keep_aspect=keep_aspect)
 
-                        canvas_obj.drawImage(stamp_img, sx, sy, width=sw_pt, height=sh_pt, mask='auto')
+                # 3) Backward compat: single stamp_image
+                stamp_image = template_config.get('stamp_image')
+                if stamp_image:
+                    sw = template_config.get('stamp_width')
+                    sh = template_config.get('stamp_height')
+                    sw_pt = _to_pt(sw) if sw is not None else None
+                    sh_pt = _to_pt(sh) if sh is not None else None
+
+                    stamp_center_x = bool(template_config.get('stamp_center_x'))
+                    if stamp_center_x:
+                        sx = (float(self.page_width) - float(sw_pt or 0)) / 2.0
+                    else:
+                        sx = _to_pt(template_config.get('stamp_x', 0))
+
+                    sy_raw = float(template_config.get('stamp_y', 0) or 0)
+                    sy_anchor = str(template_config.get('stamp_y_anchor', 'bottom') or 'bottom').lower()
+                    if coord_unit == 'px' and y_origin == 'top':
+                        sy = self._px_top_to_pt_bottom(sy_raw, self.page_height)
+                    else:
+                        sy = _to_pt(sy_raw)
+
+                    keep_aspect = bool(template_config.get('stamp_keep_aspect'))
+                    _draw_one_stamp(path=stamp_image, x=sx, y=sy, width_pt=sw_pt, height_pt=sh_pt, y_anchor=sy_anchor, keep_aspect=keep_aspect)
             except Exception:
                 pass
 
@@ -508,6 +753,40 @@ class CertificateGenerator:
                         align = item.get('align', 'center')
                         font = item.get('font')
 
+                        # Optional: character spacing (tracking). Unit follows coord_unit.
+                        _char_space_set = False
+                        try:
+                            if 'char_space' in item and item.get('char_space') is not None:
+                                cs_raw = float(item.get('char_space') or 0)
+                                if coord_unit == 'px':
+                                    canvas_obj.setCharSpace(float(self.px_to_pt(cs_raw)))
+                                else:
+                                    canvas_obj.setCharSpace(float(cs_raw) * mm)
+                                _char_space_set = True
+                        except Exception:
+                            _char_space_set = False
+
+                        # Optional: per-glyph dx mapping (unit follows coord_unit)
+                        _glyph_dx_prev = getattr(self, '_current_glyph_dx', None)
+                        try:
+                            glyph_dx_raw = item.get('glyph_dx')
+                            if isinstance(glyph_dx_raw, dict) and glyph_dx_raw:
+                                glyph_dx_pt = {}
+                                for k, v in glyph_dx_raw.items():
+                                    try:
+                                        vv = float(v or 0)
+                                    except Exception:
+                                        vv = 0.0
+                                    if coord_unit == 'px':
+                                        glyph_dx_pt[str(k)] = float(self.px_to_pt(vv))
+                                    else:
+                                        glyph_dx_pt[str(k)] = float(vv) * mm
+                                setattr(self, '_current_glyph_dx', glyph_dx_pt)
+                            else:
+                                setattr(self, '_current_glyph_dx', None)
+                        except Exception:
+                            setattr(self, '_current_glyph_dx', None)
+
                         if debug_points or item.get('debug_point'):
                             box_h = float(item.get('debug_box_height', 10))
                             box_shift = float(item.get('debug_box_y_shift', 0)) * mm
@@ -541,8 +820,29 @@ class CertificateGenerator:
                                 )
                             else:
                                 self.draw_text(canvas_obj, txt, x, y, width, font_name=font, font_size=size, align=align)
+
+                        if _char_space_set:
+                            try:
+                                canvas_obj.setCharSpace(0)
+                            except Exception:
+                                pass
+
+                        try:
+                            setattr(self, '_current_glyph_dx', _glyph_dx_prev)
+                        except Exception:
+                            pass
                     except Exception:
                         continue
+
+                debug_grid_overlay = template_config.get('debug_grid_overlay')
+                if debug_grid_overlay:
+                    try:
+                        if isinstance(debug_grid_overlay, dict):
+                            self.draw_debug_grid_overlay(canvas_obj, debug_grid_overlay)
+                        else:
+                            self.draw_debug_grid_overlay(canvas_obj, {})
+                    except Exception:
+                        pass
 
                 canvas_obj.save()
                 buffer.seek(0)

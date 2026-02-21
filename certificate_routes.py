@@ -4,10 +4,45 @@ import json
 import zipfile
 from datetime import datetime
 
+from PIL import Image
+
 from admin_auth import require_admin
 from user_auth import require_user
 
 certificate_bp = Blueprint('certificate', __name__)
+
+
+def _build_centered_stamp_images(*, cert_kind: str, count: int, width: float, height: float, gap: float, y: float, unit: str, y_origin: str, y_anchor: str, keep_aspect: bool, dx: float = 0):
+    cert_kind = str(cert_kind or '').strip().lower()
+    count = int(count or 0)
+    if cert_kind not in ('player', 'coach') or count <= 0:
+        return []
+
+    try:
+        total_w = float(width) * count + float(gap) * (count - 1)
+        start_x = -total_w / 2.0
+    except Exception:
+        start_x = 0.0
+
+    stamps = []
+    for i in range(count):
+        x = start_x + i * (float(width) + float(gap)) + float(dx or 0)
+        # Each stamp uses its own file path so it can be replaced independently.
+        # Files are managed by admin endpoints under assets/cert/stamps/<kind>/<idx>.png
+        img_path = f"assets/cert/stamps/{cert_kind}/{i + 1}.png"
+        stamps.append({
+            'image': img_path,
+            'center_x': True,
+            'x': x,
+            'width': width,
+            'height': height,
+            'unit': unit,
+            'y_origin': y_origin,
+            'y': y,
+            'y_anchor': y_anchor,
+            'keep_aspect': bool(keep_aspect),
+        })
+    return stamps
 
 
 def _pick_template_config(CertificateTemplate, generator, *, category, award_level, fallback_award_level=None):
@@ -119,16 +154,33 @@ def generate_certificate(application_id):
         try:
             bg = str((template_config or {}).get('background_image', '') or '').strip()
             if bg == 'assets/cert/player.png':
+                bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'player.png')
+                bg_w, _bg_h = Image.open(bg_abs).size
+
+                stamp_count = 6
+                stamp_margin = 80
+                stamp_gap = 30
+                stamp_w = max(60, int((int(bg_w) - 2 * stamp_margin - stamp_gap * (stamp_count - 1)) / stamp_count))
                 template_config = dict(template_config or {})
                 template_config.update({
                     'use_background_size': True,
                     'coord_unit': 'px',
                     'y_origin': 'top',
                     'global_y_offset': 0,
-                    'stamp_image': 'assets/cert/stamp.png',
-                    'stamp_center_x': True,
-                    'stamp_y': 750,
-                    'stamp_y_anchor': 'center',
+                    'stamp_images': _build_centered_stamp_images(
+                        cert_kind='player',
+                        count=stamp_count,
+                        width=stamp_w,
+                        height=stamp_w,
+                        gap=stamp_gap,
+                        # y measured from bottom (final)
+                        y=140,
+                        unit='px',
+                        y_origin='bottom',
+                        y_anchor='center',
+                        keep_aspect=True,
+                        dx=68,
+                    ),
                     'texts': [
                         {
                             'field': 'participants_names',
@@ -235,63 +287,147 @@ def generate_excellent_coach_certificate(coach_id):
         if err:
             return jsonify({'success': False, 'message': err}), 404
 
-        # Excellent coach certificate uses the same template as player certificate.
-        # Only difference: award text should be exactly '优秀辅导员'.
+        # 回滚：优秀辅导员证书走 coach.png（竖版）模板。
+        # 文案：获奖级别固定显示“优秀辅导员”。
         try:
             template_config = dict(template_config or {})
-            template_config.update({
-                'background_image': 'assets/cert/player.png',
-                'use_background_size': True,
-                'coord_unit': 'px',
-                'y_origin': 'top',
-                'global_y_offset': 0,
-                'stamp_image': 'assets/cert/stamp.png',
-                'stamp_center_x': True,
-                'stamp_y': 750,
-                'stamp_y_anchor': 'center',
-                'texts': [
-                    {
-                        'text': str(coach.teacher_name or '').strip(),
-                        'font': '宋体',
-                        'font_size': 24,
-                        'align': 'center',
-                        'width': 1262,
-                        'x': 0,
-                        'x_anchor': 'left',
-                        'y': 400,
-                    },
-                    {
-                        'field': 'category',
-                        'font': '宋体',
-                        'font_size': 24,
-                        'align': 'center',
-                        'width': 180,
-                        'x': 680,
-                        'x_anchor': 'left',
-                        'y': 470,
-                    },
-                    {
-                        'field': 'education_level',
-                        'font': '宋体',
-                        'font_size': 24,
-                        'align': 'center',
-                        'width': 140,
-                        'x': 920,
-                        'x_anchor': 'left',
-                        'y': 470,
-                    },
-                    {
-                        'text': '优秀辅导员',
-                        'font': '华文楷体',
-                        'font_size': 84,
-                        'align': 'center',
-                        'width': 1262,
-                        'x': 0,
-                        'x_anchor': 'left',
-                        'y': 590,
-                    },
-                ]
-            })
+        except Exception:
+            template_config = template_config
+
+        # 赛别：模板里自带“赛”字，这里不渲染末尾“赛”，并按“末字落点 x=750-800”做右对齐。
+        try:
+            cat = str(getattr(application, 'category', '') or '')
+            if cat.endswith('赛'):
+                setattr(application, 'category', cat[:-1])
+        except Exception:
+            pass
+
+        try:
+            texts = template_config.get('texts') if isinstance(template_config, dict) else None
+            if isinstance(texts, list):
+                for item in texts:
+                    if isinstance(item, dict) and str(item.get('field', '') or '').strip() == 'category':
+                        item['align'] = 'right'
+                        item['width'] = int(item.get('width') or 500)
+                        item['x'] = 780
+                        item['x_anchor'] = 'right'
+                        try:
+                            item['y'] = float(item.get('y') or 0) + 10
+                        except Exception:
+                            pass
+                        break
+        except Exception:
+            pass
+
+        # “优秀辅导员”字号更大，并下移 50。
+        try:
+            texts = template_config.get('texts') if isinstance(template_config, dict) else None
+            if isinstance(texts, list):
+                for item in texts:
+                    if not isinstance(item, dict):
+                        continue
+                    field = str(item.get('field', '') or '').strip()
+                    fixed_text = str(item.get('text', '') or '').strip()
+                    if field == 'award_level' or fixed_text == '优秀辅导员':
+                        try:
+                            item['font_size'] = int(float(item.get('font_size') or 0)) + 24
+                        except Exception:
+                            item['font_size'] = 140
+                        try:
+                            item['y'] = float(item.get('y') or 0) + 35
+                        except Exception:
+                            pass
+                        # 回到 coach_preview_3 风格，并在此基础上再往内收一点（约 2px 体感）
+                        # 单字微调（本轮）：仅“优”向右移 20px
+                        item['glyph_dx'] = {
+                            '优': 20,
+                            '秀': 10,
+                            '导': -10,
+                            '员': -20,
+                        }
+
+                        # 在宽度范围内重新调整字间距：先回到一个温和值，后续再按你反馈微调
+                        item['char_space'] = -1.2
+
+                        # 略微缩小字号，避免两端外扩
+                        try:
+                            item['font_size'] = int(float(item.get('font_size') or 0))
+                        except Exception:
+                            pass
+                        break
+        except Exception:
+            pass
+
+        try:
+            if str(request.args.get('debug_grid', '') or '').strip() in ('1', 'true', 'True'):
+                template_config['debug_grid_overlay'] = {
+                    'fine_step_px': 10,
+                    'main_step_px': 50,
+                    'fine_alpha': 0.18,
+                    'main_alpha': 0.55,
+                    'fine_line_width': 0.35,
+                    'main_line_width': 0.9,
+                    'label_font_size': 7,
+                }
+        except Exception:
+            pass
+
+        # 姓名/赛别字号互换
+        try:
+            texts = template_config.get('texts') if isinstance(template_config, dict) else None
+            if isinstance(texts, list):
+                name_item = None
+                cat_item = None
+                for item in texts:
+                    if not isinstance(item, dict):
+                        continue
+                    field = str(item.get('field', '') or '').strip()
+                    if field == 'contact_name':
+                        name_item = item
+                    elif field == 'category':
+                        cat_item = item
+                if isinstance(name_item, dict) and isinstance(cat_item, dict):
+                    name_fs = name_item.get('font_size')
+                    cat_fs = cat_item.get('font_size')
+                    if name_fs is not None and cat_fs is not None:
+                        name_item['font_size'] = cat_fs
+                        cat_item['font_size'] = name_fs
+        except Exception:
+            pass
+
+        # 确保模板里的 award_level 渲染为“优秀辅导员”
+        try:
+            setattr(application, 'award_level', '优秀辅导员')
+        except Exception:
+            pass
+
+        # Coach stamps: 6 stamps centered-symmetric at bottom, y measured from bottom (final)
+        try:
+            if isinstance(template_config, dict):
+                bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'coach.png')
+                bg_w, _bg_h = Image.open(bg_abs).size
+
+                stamp_count = 6
+                stamp_margin = 80
+                stamp_gap = 20
+                stamp_w = max(50, int((int(bg_w) - 2 * stamp_margin - stamp_gap * (stamp_count - 1)) / stamp_count))
+
+                template_config['coord_unit'] = 'px'
+                template_config['y_origin'] = 'top'
+                template_config['use_background_size'] = True
+                template_config['stamp_images'] = _build_centered_stamp_images(
+                    cert_kind='coach',
+                    count=stamp_count,
+                    width=stamp_w,
+                    height=stamp_w,
+                    gap=stamp_gap,
+                    y=170,
+                    unit='px',
+                    y_origin='bottom',
+                    y_anchor='center',
+                    keep_aspect=True,
+                    dx=70,
+                )
         except Exception:
             pass
 
