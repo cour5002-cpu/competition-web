@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file, current_app
 import pandas as pd
 import io
 import base64
@@ -133,6 +133,10 @@ def _wx_send_audit_subscribe(openid: str, status_text: str, reviewed_at_dt, reas
 
         to_user = str(openid or '').strip()
         if not to_user:
+            try:
+                current_app.logger.info('wx_subscribe_send skipped: missing_openid')
+            except Exception:
+                pass
             return {'enabled': False, 'success': False, 'error': 'missing_openid'}
 
         template_id = str(os.environ.get('WX_SUBSCRIBE_AUDIT_TEMPLATE_ID', '') or '').strip()
@@ -141,6 +145,10 @@ def _wx_send_audit_subscribe(openid: str, status_text: str, reviewed_at_dt, reas
 
         tok = _wx_get_access_token()
         if not tok.get('success'):
+            try:
+                current_app.logger.info('wx_subscribe_send failed: get_access_token_failed=%s', tok.get('message'))
+            except Exception:
+                pass
             return {'enabled': True, 'success': False, 'error': tok.get('message'), 'raw': tok.get('raw')}
 
         access_token = tok.get('token')
@@ -182,6 +190,17 @@ def _wx_send_audit_subscribe(openid: str, status_text: str, reviewed_at_dt, reas
         errcode = payload.get('errcode')
         errmsg = payload.get('errmsg')
         ok = (errcode == 0) or (str(errcode) == '0')
+        try:
+            tail = to_user[-6:] if len(to_user) >= 6 else to_user
+            current_app.logger.info(
+                'wx_subscribe_send result: ok=%s openid_tail=%s errcode=%s errmsg=%s',
+                bool(ok),
+                tail,
+                errcode,
+                str(errmsg or '')
+            )
+        except Exception:
+            pass
         return {
             'enabled': True,
             'success': bool(ok),
@@ -189,6 +208,10 @@ def _wx_send_audit_subscribe(openid: str, status_text: str, reviewed_at_dt, reas
             'raw': payload
         }
     except Exception as e:
+        try:
+            current_app.logger.info('wx_subscribe_send exception: %s', str(e))
+        except Exception:
+            pass
         return {'enabled': True, 'success': False, 'error': str(e)}
 
 
