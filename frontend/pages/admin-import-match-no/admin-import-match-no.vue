@@ -16,6 +16,10 @@
         <button class="btn" :disabled="!filePath || uploading" @click="upload">上传导入</button>
       </view>
 
+      <view class="btn-row" style="margin-top: 10px;">
+        <button class="btn-secondary" @click="downloadTemplate">下载模板Excel</button>
+      </view>
+
       <view class="result" v-if="result">
         <text class="result-title">导入结果</text>
         <text class="result-line">总计：{{ result.total_count }}</text>
@@ -65,6 +69,36 @@ export default {
   methods: {
     goBack() {
       uni.navigateBack({ delta: 1 })
+    },
+
+    downloadTemplate() {
+      const token = String(uni.getStorageSync('admin_token') || '').trim()
+      if (!token) {
+        uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+        return
+      }
+
+      uni.showLoading({ title: '下载中...' })
+      uni.downloadFile({
+        url: `${BASE_URL}/api/admin/download-template/match-no`,
+        header: { Authorization: `Bearer ${token}` },
+        success: (res) => {
+          uni.hideLoading()
+          if (!res || res.statusCode !== 200 || !res.tempFilePath) {
+            uni.showToast({ title: '下载失败', icon: 'none' })
+            return
+          }
+          uni.openDocument({
+            filePath: res.tempFilePath,
+            showMenu: true,
+            fail: () => uni.showToast({ title: '打开失败', icon: 'none' })
+          })
+        },
+        fail: () => {
+          uni.hideLoading()
+          uni.showToast({ title: '下载失败', icon: 'none' })
+        }
+      })
     },
 
     pickFile() {

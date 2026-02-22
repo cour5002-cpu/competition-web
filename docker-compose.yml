@@ -8,6 +8,10 @@ services:
     container_name: competition-web
     ports:
       - "5000:5000"
+    volumes:
+      - ./assets/cert/stamps:/app/assets/cert/stamps
+      - ./assets/cert/测试盖章.png:/app/assets/cert/测试盖章.png
+      - ./assets/cert/test.png:/app/assets/cert/test.png
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - SECRET_KEY=${SECRET_KEY}

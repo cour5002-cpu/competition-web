@@ -503,6 +503,17 @@ class CertificateGenerator:
                     base_dir = os.path.dirname(os.path.abspath(__file__))
                     return os.path.join(base_dir, p) if not os.path.isabs(str(p)) else str(p)
 
+                def _resolve_existing_path(primary_path, fallback_images=None):
+                    resolved = _resolve_path(primary_path)
+                    if resolved and os.path.exists(resolved):
+                        return resolved
+                    if isinstance(fallback_images, (list, tuple)):
+                        for fp in fallback_images:
+                            rr = _resolve_path(fp)
+                            if rr and os.path.exists(rr):
+                                return rr
+                    return ''
+
                 def _draw_one_stamp(*, path, x, y, width_pt=None, height_pt=None, y_anchor='bottom', keep_aspect=False):
                     stamp_path = _resolve_path(path)
                     if not stamp_path or not os.path.exists(stamp_path):
@@ -599,51 +610,65 @@ class CertificateGenerator:
                         )
 
                 # 2) New: stamp_images list (each item may have own x/y)
-                stamp_images = template_config.get('stamp_images')
+                stamp_images = template_config.get('stamp_images') or []
                 if isinstance(stamp_images, list) and stamp_images:
                     for item in stamp_images:
-                        if isinstance(item, str):
-                            item = {'image': item}
-                        if not isinstance(item, dict):
+                        try:
+                            fallback_images = None
+                            if isinstance(item, dict):
+                                if item.get('fallback_image'):
+                                    fallback_images = [item.get('fallback_image')]
+                                elif item.get('fallback_images'):
+                                    fallback_images = item.get('fallback_images')
+
+                            path = item.get('image') or item.get('path')
+                            stamp_path = _resolve_existing_path(path, fallback_images=fallback_images)
+                            if not stamp_path:
+                                continue
+
+                            local_unit = str(item.get('unit', coord_unit) or coord_unit).lower()
+                            local_y_origin = str(item.get('y_origin', y_origin) or y_origin).lower()
+
+                            def _to_pt_local(v):
+                                if v is None:
+                                    return 0.0
+                                if local_unit == 'px':
+                                    return float(self.px_to_pt(v))
+                                return float(v) * mm
+
+                            sw = item.get('width', template_config.get('stamp_width'))
+                            sh = item.get('height', template_config.get('stamp_height'))
+                            sw_pt = _to_pt_local(sw) if sw is not None else None
+                            sh_pt = _to_pt_local(sh) if sh is not None else None
+
+                            stamp_center_x = bool(item.get('center_x', template_config.get('stamp_center_x')))
+                            if stamp_center_x:
+                                base_sx = (float(self.page_width) - float(sw_pt or 0)) / 2.0
+                                dx = _to_pt_local(item.get('x', 0))
+                                sx = float(base_sx) + float(dx)
+                            else:
+                                sx = _to_pt_local(item.get('x', template_config.get('stamp_x', 0)))
+
+                            sy_raw = float(item.get('y', template_config.get('stamp_y', 0)) or 0)
+                            sy_anchor = str(item.get('y_anchor', template_config.get('stamp_y_anchor', 'bottom')) or 'bottom').lower()
+                            if local_unit == 'px' and local_y_origin == 'top':
+                                sy = self._px_top_to_pt_bottom(sy_raw, self.page_height)
+                            else:
+                                sy = _to_pt_local(sy_raw)
+
+                            keep_aspect = bool(item.get('keep_aspect') or template_config.get('stamp_keep_aspect'))
+                            _draw_one_stamp(
+                                path=stamp_path,
+                                x=sx,
+                                y=sy,
+                                width_pt=sw_pt,
+                                height_pt=sh_pt,
+                                y_anchor=sy_anchor,
+                                keep_aspect=keep_aspect,
+                            )
+
+                        except Exception:
                             continue
-                        img = item.get('image') or item.get('path')
-                        if not img:
-                            continue
-
-                        local_unit = str(item.get('unit', coord_unit) or coord_unit).lower()
-                        local_y_origin = str(item.get('y_origin', y_origin) or y_origin).lower()
-
-                        def _to_pt_local(v):
-                            if v is None:
-                                return 0.0
-                            if local_unit == 'px':
-                                return float(self.px_to_pt(v))
-                            return float(v) * mm
-
-                        sw = item.get('width', template_config.get('stamp_width'))
-                        sh = item.get('height', template_config.get('stamp_height'))
-                        sw_pt = _to_pt_local(sw) if sw is not None else None
-                        sh_pt = _to_pt_local(sh) if sh is not None else None
-
-                        stamp_center_x = bool(item.get('center_x', template_config.get('stamp_center_x')))
-                        if stamp_center_x:
-                            # When center_x is enabled, allow item.x to act as an offset from center.
-                            # This is required for centered-symmetric multi-stamp layouts.
-                            base_sx = (float(self.page_width) - float(sw_pt or 0)) / 2.0
-                            dx = _to_pt_local(item.get('x', 0))
-                            sx = float(base_sx) + float(dx)
-                        else:
-                            sx = _to_pt_local(item.get('x', template_config.get('stamp_x', 0)))
-
-                        sy_raw = float(item.get('y', template_config.get('stamp_y', 0)) or 0)
-                        sy_anchor = str(item.get('y_anchor', template_config.get('stamp_y_anchor', 'bottom')) or 'bottom').lower()
-                        if local_unit == 'px' and local_y_origin == 'top':
-                            sy = self._px_top_to_pt_bottom(sy_raw, self.page_height)
-                        else:
-                            sy = _to_pt_local(sy_raw)
-
-                        keep_aspect = bool(item.get('keep_aspect') or template_config.get('stamp_keep_aspect'))
-                        _draw_one_stamp(path=img, x=sx, y=sy, width_pt=sw_pt, height_pt=sh_pt, y_anchor=sy_anchor, keep_aspect=keep_aspect)
 
                 # 3) Backward compat: single stamp_image
                 stamp_image = template_config.get('stamp_image')

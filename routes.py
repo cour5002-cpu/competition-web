@@ -85,6 +85,15 @@ def wx_login():
             msg = '微信登录失败'
             if errcode is not None or errmsg:
                 msg = f'微信登录失败: {errcode} {errmsg}'.strip()
+            try:
+                if str(errcode) == '40029':
+                    appid_tail = str(appid)[-6:] if appid else ''
+                    msg = (
+                        f"微信登录失败: {errcode} {errmsg}。"
+                        f"请检查后端环境变量 WX_APPID/WX_SECRET 是否与当前小程序 AppID 一致（后端 appid 尾号:{appid_tail}）。"
+                    )
+            except Exception:
+                pass
             return jsonify({
                 'success': False,
                 'message': msg,

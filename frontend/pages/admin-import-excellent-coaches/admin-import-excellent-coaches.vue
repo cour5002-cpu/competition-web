@@ -8,6 +8,10 @@
         <button class="btn" @click="chooseFile">选择Excel文件</button>
       </view>
 
+      <view class="row">
+        <button class="btn-secondary" @click="downloadTemplate">下载模板Excel</button>
+      </view>
+
       <view v-if="fileName" class="file-info">
         <text>已选择：{{ fileName }}</text>
       </view>
@@ -63,6 +67,36 @@ export default {
   methods: {
     goBack() {
       uni.navigateBack({ delta: 1 })
+    },
+
+    downloadTemplate() {
+      const token = String(uni.getStorageSync('admin_token') || '').trim()
+      if (!token) {
+        uni.redirectTo({ url: '/pages/admin-login/admin-login' })
+        return
+      }
+
+      uni.showLoading({ title: '下载中...' })
+      uni.downloadFile({
+        url: `${BASE_URL}/api/admin/download-template/excellent-coaches`,
+        header: { Authorization: `Bearer ${token}` },
+        success: (res) => {
+          uni.hideLoading()
+          if (!res || res.statusCode !== 200 || !res.tempFilePath) {
+            uni.showToast({ title: '下载失败', icon: 'none' })
+            return
+          }
+          uni.openDocument({
+            filePath: res.tempFilePath,
+            showMenu: true,
+            fail: () => uni.showToast({ title: '打开失败', icon: 'none' })
+          })
+        },
+        fail: () => {
+          uni.hideLoading()
+          uni.showToast({ title: '下载失败', icon: 'none' })
+        }
+      })
     },
 
     chooseFile() {
