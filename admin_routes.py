@@ -126,7 +126,7 @@ def _wx_get_access_token():
         return {'success': False, 'message': str(e), 'raw': None}
 
 
-def _wx_send_audit_subscribe(openid: str, status_text: str, reviewed_at_dt, reason_text: str, page_path: str):
+def _wx_send_audit_subscribe(openid: str, event_name: str, status_text: str, reviewed_at_dt, reason_text: str, page_path: str):
     try:
         import json as _json
         import urllib.request
@@ -162,12 +162,17 @@ def _wx_send_audit_subscribe(openid: str, status_text: str, reviewed_at_dt, reas
         if not reviewed_at_str:
             reviewed_at_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+        event_val = str(event_name or '').strip() or '赛事报名'
+        status_val = str(status_text or '').strip() or '已更新'
+        reason_val = str(reason_text or '').strip() or '-'
+
         data = {
             # Note: keyword IDs must match the selected subscribe message template.
-            # The current template in use expects `thing1`.
-            'thing1': {'value': str(status_text or '').strip() or '已更新'},
+            # Current template keywords: 赛事名称、报名情况
+            'thing4': {'value': event_val},
+            'thing1': {'value': status_val},
             'time11': {'value': reviewed_at_str},
-            'thing29': {'value': str(reason_text or '').strip() or '-'}
+            'thing29': {'value': reason_val}
         }
 
         body = {
@@ -686,11 +691,17 @@ def admin_approve_application(application_id):
 
         db.session.commit()
 
+        event_name = '-'.join([
+            str(getattr(application, 'category', '') or '').strip(),
+            str(getattr(application, 'task', '') or '').strip(),
+        ]).strip('-')
+
         subscribe = _wx_send_audit_subscribe(
             getattr(application, 'openid', None),
-            '报名成功',
-            getattr(application, 'reviewed_at', None),
+            event_name,
             '审核通过',
+            getattr(application, 'reviewed_at', None),
+            '报名成功',
             'pages/application-query/application-query'
         )
 
@@ -732,8 +743,14 @@ def admin_reject_application(application_id):
         db.session.commit()
 
         notify = _send_reject_notification_mail(application, reason)
+        event_name = '-'.join([
+            str(getattr(application, 'category', '') or '').strip(),
+            str(getattr(application, 'task', '') or '').strip(),
+        ]).strip('-')
+
         subscribe = _wx_send_audit_subscribe(
             getattr(application, 'openid', None),
+            event_name,
             '审核未通过',
             getattr(application, 'reviewed_at', None),
             reason,
