@@ -155,7 +155,9 @@ def _wx_send_audit_subscribe(openid: str, status_text: str, reviewed_at_dt, reas
             reviewed_at_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         data = {
-            'phrase1': {'value': str(status_text or '').strip() or '已更新'},
+            # Note: keyword IDs must match the selected subscribe message template.
+            # The current template in use expects `thing1`.
+            'thing1': {'value': str(status_text or '').strip() or '已更新'},
             'time11': {'value': reviewed_at_str},
             'thing29': {'value': str(reason_text or '').strip() or '-'}
         }
