@@ -116,6 +116,91 @@ def _find_awarded_application_for_coach(*, teacher_name: str, teacher_phone_hash
         Application.award_level.isnot(None)
     ).order_by(Application.created_at.desc()).first()
 
+
+def _apply_student_award_level_red(template_config):
+    try:
+        template_config = dict(template_config or {})
+        texts = template_config.get('texts')
+        if isinstance(texts, list):
+            for item in texts:
+                if not isinstance(item, dict):
+                    continue
+                field = str(item.get('field', '') or '').strip()
+                fixed_text = str(item.get('text', '') or '').strip()
+                if field == 'award_level':
+                    item['color'] = '#D0021B'
+                    continue
+                if fixed_text:
+                    if fixed_text.endswith('等奖') or fixed_text == '优秀奖':
+                        item['color'] = '#D0021B'
+        return template_config
+    except Exception:
+        return template_config
+
+
+def _strip_coach_title_texts(template_config):
+    try:
+        template_config = dict(template_config or {})
+        texts = template_config.get('texts')
+        if not isinstance(texts, list):
+            return template_config
+        filtered = []
+        for item in texts:
+            if not isinstance(item, dict):
+                filtered.append(item)
+                continue
+            field = str(item.get('field', '') or '').strip()
+            fixed_text = str(item.get('text', '') or '').strip()
+            if field == 'award_level':
+                continue
+            if fixed_text == '优秀辅导员':
+                continue
+            filtered.append(item)
+        template_config['texts'] = filtered
+        return template_config
+    except Exception:
+        return template_config
+
+
+def _ensure_coach_title_red(template_config):
+    try:
+        template_config = dict(template_config or {})
+        texts = template_config.get('texts')
+        if not isinstance(texts, list):
+            texts = []
+
+        filtered = []
+        for item in texts:
+            if not isinstance(item, dict):
+                filtered.append(item)
+                continue
+            field = str(item.get('field', '') or '').strip()
+            fixed_text = str(item.get('text', '') or '').strip()
+            if field == 'award_level':
+                continue
+            if fixed_text == '优秀辅导员':
+                continue
+            filtered.append(item)
+
+        filtered.append({
+            'text': '优秀辅导员',
+            'font': '华文楷体',
+            'font_size': 145,
+            'align': 'center',
+            'glyph_dx': {'优': 20, '秀': 10, '导': -10, '员': -20},
+            'char_space': -1.2,
+            'color': '#D0021B',
+            'width': int(template_config.get('page_width') or template_config.get('bg_width') or 1240),
+            'x': 0,
+            'x_anchor': 'left',
+            'y': 1465,
+        })
+
+        template_config['texts'] = filtered
+        return template_config
+    except Exception:
+        return template_config
+
 @certificate_bp.route('/api/certificate/generate/<int:application_id>', methods=['GET'])
 @require_user()
 def generate_certificate(application_id):
@@ -153,6 +238,8 @@ def generate_certificate(application_id):
                 'success': False,
                 'message': err
             }), 404
+
+        template_config = _apply_student_award_level_red(template_config)
 
         # Student stamps (final): always inject 6 stamps at the bottom.
         # Do NOT depend on a specific background_image value, because templates may vary.
@@ -280,34 +367,8 @@ def generate_excellent_coach_certificate(coach_id):
             pass
 
         try:
-            setattr(application, 'award_level', '优秀辅导员')
-        except Exception:
-            pass
-
-        try:
-            texts = template_config.get('texts') if isinstance(template_config, dict) else None
-            if isinstance(texts, list):
-                for item in texts:
-                    if not isinstance(item, dict):
-                        continue
-                    field = str(item.get('field', '') or '').strip()
-                    if field == 'contact_name':
-                        item['field'] = 'teacher_name'
-                for item in texts:
-                    if not isinstance(item, dict):
-                        continue
-                    field = str(item.get('field', '') or '').strip()
-                    fixed_text = str(item.get('text', '') or '').strip()
-                    if field == 'award_level' and fixed_text != '优秀辅导员':
-                        item.pop('field', None)
-                        item['text'] = '优秀辅导员'
-                        break
-        except Exception:
-            pass
-
-        try:
             if isinstance(template_config, dict):
-                bg_w = None
+                bg_w = 1240
                 try:
                     bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'coach.png')
                     bg_w, _bg_h = Image.open(bg_abs).size
@@ -347,18 +408,6 @@ def generate_excellent_coach_certificate(coach_id):
                         'x_anchor': 'right',
                         'y': 1280,
                     },
-                    {
-                        'text': '优秀辅导员',
-                        'font': '华文楷体',
-                        'font_size': 145,
-                        'align': 'center',
-                        'glyph_dx': {'优': 20, '秀': 10, '导': -10, '员': -20},
-                        'char_space': -1.2,
-                        'width': int(bg_w),
-                        'x': 0,
-                        'x_anchor': 'left',
-                        'y': 1465,
-                    },
                 ]
 
                 template_config['stamp_images'] = _build_centered_stamp_images(
@@ -376,6 +425,19 @@ def generate_excellent_coach_certificate(coach_id):
                 )
         except Exception:
             pass
+
+        try:
+            if isinstance(template_config, dict):
+                try:
+                    bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'coach.png')
+                    bg_w, _bg_h = Image.open(bg_abs).size
+                    template_config['bg_width'] = int(bg_w)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        template_config = _ensure_coach_title_red(template_config)
 
         pdf_content = generator.generate_certificate(application, template_config)
 
@@ -483,18 +545,6 @@ def generate_coach_certificate(application_id):
                         'x_anchor': 'right',
                         'y': 1280,
                     },
-                    {
-                        'text': '优秀辅导员',
-                        'font': '华文楷体',
-                        'font_size': 145,
-                        'align': 'center',
-                        'glyph_dx': {'优': 20, '秀': 10, '导': -10, '员': -20},
-                        'char_space': -1.2,
-                        'width': bg_w,
-                        'x': 0,
-                        'x_anchor': 'left',
-                        'y': 1465,
-                    },
                 ]
 
                 template_config['stamp_images'] = _build_centered_stamp_images(
@@ -512,6 +562,19 @@ def generate_coach_certificate(application_id):
                 )
         except Exception:
             pass
+
+        try:
+            if isinstance(template_config, dict):
+                try:
+                    bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'coach.png')
+                    bg_w, _bg_h = Image.open(bg_abs).size
+                    template_config['bg_width'] = int(bg_w)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        template_config = _ensure_coach_title_red(template_config)
 
         pdf_content = generator.generate_certificate(application, template_config)
 
@@ -584,6 +647,7 @@ def batch_generate_certificates():
                 )
                 if err:
                     raise ValueError(err)
+                template_config = _apply_student_award_level_red(template_config)
                 pdf_content = generator.generate_certificate(application, template_config)
                 player_filename = (
                     f"{match_no}_"
@@ -610,6 +674,12 @@ def batch_generate_certificates():
                 )
                 if coach_err:
                     raise ValueError(coach_err)
+                try:
+                    if isinstance(coach_config, dict):
+                        coach_config['bg_width'] = 1240
+                except Exception:
+                    pass
+                coach_config = _ensure_coach_title_red(coach_config)
                 coach_pdf = generator.generate_certificate(application, coach_config)
                 teacher_name = getattr(application, 'teacher_name', '') or ''
                 coach_filename = (

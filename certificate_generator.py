@@ -754,6 +754,37 @@ class CertificateGenerator:
                 debug_points = template_config.get('debug_points')
                 for item in template_config.get('texts', []):
                     try:
+                        # Optional: per-item color override.
+                        _prev_fill_color = None
+                        try:
+                            _prev_fill_color = canvas_obj._fillColor
+                        except Exception:
+                            _prev_fill_color = None
+
+                        try:
+                            item_color = item.get('color') if isinstance(item, dict) else None
+                            if item_color is not None and item_color != '':
+                                c = None
+                                if isinstance(item_color, str):
+                                    ss = item_color.strip()
+                                    if ss.startswith('#') and len(ss) == 7:
+                                        r = int(ss[1:3], 16) / 255.0
+                                        g = int(ss[3:5], 16) / 255.0
+                                        b = int(ss[5:7], 16) / 255.0
+                                        c = Color(r, g, b)
+                                elif isinstance(item_color, (list, tuple)) and len(item_color) >= 3:
+                                    r = float(item_color[0])
+                                    g = float(item_color[1])
+                                    b = float(item_color[2])
+                                    if r > 1 or g > 1 or b > 1:
+                                        r, g, b = r / 255.0, g / 255.0, b / 255.0
+                                    c = Color(max(0, min(1, r)), max(0, min(1, g)), max(0, min(1, b)))
+
+                                if c is not None:
+                                    canvas_obj.setFillColor(c)
+                        except Exception:
+                            pass
+
                         width = _to_pt(item.get('width', 0))
                         x = _to_pt(item.get('x', 0))
 
@@ -845,6 +876,14 @@ class CertificateGenerator:
                                 )
                             else:
                                 self.draw_text(canvas_obj, txt, x, y, width, font_name=font, font_size=size, align=align)
+
+                        try:
+                            if _prev_fill_color is not None:
+                                canvas_obj.setFillColor(_prev_fill_color)
+                            else:
+                                canvas_obj.setFillColor(text_color)
+                        except Exception:
+                            pass
 
                         if _char_space_set:
                             try:

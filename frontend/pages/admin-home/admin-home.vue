@@ -15,6 +15,7 @@
       <button class="btn" @click="goImportMatchNo">参赛号导入</button>
       <button class="btn" @click="goImportAwards">获奖导入</button>
       <button class="btn" @click="goImportExcellentCoaches">优秀辅导员导入</button>
+      <button class="btn" @click="goStampUpload">盖章图片上传</button>
       <button class="btn" @click="goStats">可视化统计</button>
       <button class="btn" @click="goAdminMe">验证登录状态</button>
 
@@ -65,6 +66,10 @@ export default {
 
     goImportExcellentCoaches() {
       uni.navigateTo({ url: '/pages/admin-import-excellent-coaches/admin-import-excellent-coaches' })
+    },
+
+    goStampUpload() {
+      uni.navigateTo({ url: '/pages/admin-stamp-upload/admin-stamp-upload' })
     },
 
     goStats() {
