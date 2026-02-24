@@ -44,14 +44,14 @@
         </button>
 
         <view class="tip" v-if="autoGenerate">
-          若勾选生成证书：后端会返回 zip 文件，请在下载完成后手动打开。
+          已开始后台生成证书。你可以前往“证书ZIP下载”页面下载已生成的证书压缩包。
         </view>
 
-        <view class="tip" v-if="lastZip && lastZip.path">
-          <text>最近下载zip：约 {{ lastZip.size_kb }}KB</text>
+        <view class="tip" v-if="autoGenerate && result && result.task_id">
+          <text>Task ID：{{ result.task_id }}</text>
           <view style="margin-top: 8px; display: flex; gap: 10px;">
-            <button class="btn-secondary" @click="copyLastZipPath">复制路径</button>
-            <button class="btn" @click="shareLastZip">转发到微信</button>
+            <button class="btn-secondary" @click="copyTaskId">复制Task ID</button>
+            <button class="btn" @click="goZipPage">去下载ZIP</button>
           </view>
         </view>
       </view>
@@ -196,103 +196,6 @@ export default {
 
           this.result = payload.data || null
           uni.showToast({ title: '导入完成', icon: 'success' })
-
-          if (this.autoGenerate && this.result && this.result.zip_download_url) {
-            const downloadUrl = `${BASE_URL}${this.result.zip_download_url}`
-            uni.showLoading({ title: '下载证书中...' })
-            uni.downloadFile({
-              url: downloadUrl,
-              header: {
-                Authorization: `Bearer ${token}`
-              },
-              success: (dres) => {
-                uni.hideLoading()
-                if (!dres || dres.statusCode !== 200 || !dres.tempFilePath) {
-                  uni.showToast({ title: '下载失败', icon: 'none' })
-                  return
-                }
-
-                const tempPath = dres.tempFilePath
-
-                // 校验下载文件大小，避免 0KB（通常是后端返回空内容/网络地址不对）
-                uni.getFileInfo({
-                  filePath: tempPath,
-                  success: (fres) => {
-                    const size = Number((fres && fres.size) || 0)
-                    if (size <= 0) {
-                      uni.showModal({
-                        title: '下载到 0KB',
-                        content: `证书zip下载到了 0KB。\n\n状态码：${dres.statusCode}\n地址：${downloadUrl}\n\n请检查：\n1) BASE_URL 是否可被当前运行端访问（小程序真机不能用 127.0.0.1）\n2) 后端是否实际生成了zip文件`,
-                        showCancel: false
-                      })
-                      return
-                    }
-
-                    // 小程序端通常无法直接 openDocument 打开 zip，改为保存文件并提示用户自行解压
-                    uni.saveFile({
-                      tempFilePath: tempPath,
-                      success: (sres) => {
-                        const saved = (sres && sres.savedFilePath) ? sres.savedFilePath : tempPath
-                        this.lastZip = {
-                          path: saved,
-                          size_bytes: size,
-                          size_kb: Math.max(1, Math.round(size / 1024)),
-                          downloadUrl
-                        }
-                        uni.showModal({
-                          title: '证书压缩包已下载',
-                          content: `已保存（约 ${Math.round(size / 1024)}KB）。请通过微信文件/文件管理器找到该zip，或转发到电脑解压查看。`,
-                          showCancel: false
-                        })
-                        try {
-                          uni.setClipboardData({ data: saved })
-                        } catch (e) {}
-                      },
-                      fail: () => {
-                        this.lastZip = {
-                          path: tempPath,
-                          size_bytes: size,
-                          size_kb: Math.max(1, Math.round(size / 1024)),
-                          downloadUrl
-                        }
-                        uni.showModal({
-                          title: '证书压缩包已下载',
-                          content: `zip 已下载到临时文件（约 ${Math.round(size / 1024)}KB）。请在微信下载列表中保存/转发到电脑后解压查看。`,
-                          showCancel: false
-                        })
-                      }
-                    })
-                  },
-                  fail: () => {
-                    // 获取不到大小也尝试保存
-                    uni.saveFile({
-                      tempFilePath: tempPath,
-                      success: () => {
-                        this.lastZip = {
-                          path: tempPath,
-                          size_bytes: 0,
-                          size_kb: 0,
-                          downloadUrl
-                        }
-                        uni.showModal({
-                          title: '证书压缩包已下载',
-                          content: '已保存到本地文件。请通过微信文件/文件管理器找到该zip，或转发到电脑解压查看。',
-                          showCancel: false
-                        })
-                      },
-                      fail: () => {
-                        uni.showToast({ title: '保存失败', icon: 'none' })
-                      }
-                    })
-                  }
-                })
-              },
-              fail: () => {
-                uni.hideLoading()
-                uni.showToast({ title: '下载失败', icon: 'none' })
-              }
-            })
-          }
         },
         fail: () => {
           uni.hideLoading()
@@ -302,50 +205,23 @@ export default {
       })
     },
 
-    copyLastZipPath() {
-      if (!this.lastZip || !this.lastZip.path) {
-        uni.showToast({ title: '暂无zip路径', icon: 'none' })
+    copyTaskId() {
+      const tid = this.result && this.result.task_id ? String(this.result.task_id) : ''
+      if (!tid) {
+        uni.showToast({ title: '暂无Task ID', icon: 'none' })
         return
       }
       try {
-        uni.setClipboardData({ data: String(this.lastZip.path) })
+        uni.setClipboardData({ data: tid })
       } catch (e) {
         uni.showToast({ title: '复制失败', icon: 'none' })
       }
     },
 
-    shareLastZip() {
-      if (!this.lastZip || !this.lastZip.path) {
-        uni.showToast({ title: '暂无zip文件', icon: 'none' })
-        return
-      }
-
-      // 微信小程序专用：把沙盒文件“转发到聊天”，用户可在聊天里保存/发到电脑解压
-      // eslint-disable-next-line no-undef
-      if (typeof wx !== 'undefined' && wx && typeof wx.shareFileMessage === 'function') {
-        // eslint-disable-next-line no-undef
-        wx.shareFileMessage({
-          filePath: this.lastZip.path,
-          fileName: `获奖证书_${Date.now()}.zip`,
-          success: () => {
-            uni.showToast({ title: '已唤起转发', icon: 'success' })
-          },
-          fail: () => {
-            uni.showModal({
-              title: '转发失败',
-              content: '微信可能不支持转发该文件或文件已被系统清理。你可以尝试重新下载后再转发。',
-              showCancel: false
-            })
-          }
-        })
-        return
-      }
-
-      uni.showModal({
-        title: '当前环境不支持',
-        content: '只有微信小程序环境支持直接转发文件。你可以在开发者工具/真机中重试，或把下载地址发到电脑浏览器下载。',
-        showCancel: false
-      })
+    goZipPage() {
+      const tid = this.result && this.result.task_id ? String(this.result.task_id) : ''
+      const qs = tid ? `?task_id=${encodeURIComponent(tid)}` : ''
+      uni.navigateTo({ url: `/pages/admin-cert-zip-download/admin-cert-zip-download${qs}` })
     },
 
     downloadErrorLog() {

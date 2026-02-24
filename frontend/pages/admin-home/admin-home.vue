@@ -16,6 +16,7 @@
       <button class="btn" @click="goImportAwards">获奖导入</button>
       <button class="btn" @click="goImportExcellentCoaches">优秀辅导员导入</button>
       <button class="btn" @click="goStampUpload">盖章图片上传</button>
+      <button class="btn" @click="goCertZip">证书ZIP下载</button>
       <button class="btn" @click="goStats">可视化统计</button>
       <button class="btn" @click="goAdminMe">验证登录状态</button>
 
@@ -70,6 +71,10 @@ export default {
 
     goStampUpload() {
       uni.navigateTo({ url: '/pages/admin-stamp-upload/admin-stamp-upload' })
+    },
+
+    goCertZip() {
+      uni.navigateTo({ url: '/pages/admin-cert-zip-download/admin-cert-zip-download' })
     },
 
     goStats() {

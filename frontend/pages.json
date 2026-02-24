@@ -61,6 +61,12 @@
       }
     },
     {
+      "path": "pages/admin-cert-zip-download/admin-cert-zip-download",
+      "style": {
+        "navigationBarTitleText": "证书ZIP下载"
+      }
+    },
+    {
       "path": "pages/admin-stats/admin-stats",
       "style": {
         "navigationBarTitleText": "可视化统计"

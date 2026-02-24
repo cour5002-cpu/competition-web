@@ -1307,113 +1307,23 @@ def import_awards():
         auto_generate = str(request.args.get('auto_generate', '') or '').strip() in ['1', 'true', 'True', 'yes', 'on']
         if auto_generate and updated_application_ids:
             try:
-                from models import CertificateTemplate
-                from certificate_generator import CertificateGenerator
-                from certificate_routes import _pick_template_config
+                from certificate_routes import _start_background_cert_task
 
-                applications = Application.query.filter(
-                    Application.id.in_(updated_application_ids),
-                    Application.award_level.isnot(None)
-                ).all()
-
-                generator = CertificateGenerator()
-                generated = []
-                gen_errors = []
-
-                for application in applications:
-                    try:
-                        match_no = _safe_filename_part(application.match_no)
-                        participants = sorted(application.participants, key=lambda p: p.seq_no)
-                        name_part = "、".join([p.participant_name for p in participants]) if participants else ''
-
-                        # 学生证书
-                        template_config, err = _pick_template_config(
-                            CertificateTemplate,
-                            generator,
-                            category=application.category,
-                            award_level=application.award_level,
-                            fallback_award_level='一等奖'
-                        )
-                        if err:
-                            raise ValueError(err)
-                        pdf_content = generator.generate_certificate(application, template_config)
-                        player_filename = (
-                            f"{match_no}_"
-                            f"{_safe_filename_part(name_part)}_"
-                            f"{_safe_filename_part(application.category)}_"
-                            f"{_safe_filename_part(application.education_level)}_"
-                            f"{_safe_filename_part(application.award_level)}.pdf"
-                        )
-                        generated.append({'filename': player_filename, 'content': pdf_content})
-
-                        # 辅导员证书
-                        coach_award_level = f"{application.award_level}-辅导员"
-                        coach_config, coach_err = _pick_template_config(
-                            CertificateTemplate,
-                            generator,
-                            category=application.category,
-                            award_level=coach_award_level,
-                            fallback_award_level='一等奖-辅导员'
-                        )
-                        if coach_err:
-                            raise ValueError(coach_err)
-                        coach_pdf = generator.generate_certificate(application, coach_config)
-                        teacher_name = getattr(application, 'teacher_name', '') or ''
-                        coach_filename = (
-                            f"{match_no}_"
-                            f"{_safe_filename_part(teacher_name)}_"
-                            f"{_safe_filename_part(application.category)}_"
-                            f"{_safe_filename_part(coach_award_level)}.pdf"
-                        )
-                        generated.append({'filename': coach_filename, 'content': coach_pdf})
-
-                    except Exception as e:
-                        gen_errors.append({'application_id': application.id, 'error': str(e)})
-
-                if not generated:
-                    return jsonify({
-                        'success': False,
-                        'message': f'导入成功，但证书批量生成失败：全部生成失败（失败 {len(gen_errors)} 个）',
-                        'data': {
-                            'import_log_id': import_log.id,
-                            'errors': gen_errors
-                        }
-                    }), 500
-
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-                    for item in generated:
-                        zf.writestr(item['filename'], item['content'])
-                    manifest = {
-                        'import_log_id': import_log.id,
-                        'total_rows': total_count,
-                        'import_success_count': success_count,
-                        'import_failed_count': failed_count,
-                        'generated_count': len(generated),
-                        'generate_error_count': len(gen_errors),
-                        'generate_errors': gen_errors
-                    }
-                    zf.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
-
-                zip_buffer.seek(0)
-                # 小程序端 uploadFile 无法稳定处理二进制响应，改为落盘 + 返回下载地址
-                folder = os.path.join(os.getcwd(), 'generated_zips')
-                os.makedirs(folder, exist_ok=True)
-                zip_path = os.path.join(folder, f"award_import_{import_log.id}.zip")
-                with open(zip_path, 'wb') as f:
-                    f.write(zip_buffer.getvalue())
+                task_id = _start_background_cert_task(
+                    application_ids=updated_application_ids,
+                    source=f'award-import:{import_log.id}'
+                )
 
                 return jsonify({
                     'success': True,
-                    'message': f'导入完成，成功 {success_count} 条，失败 {failed_count} 条；证书压缩包已生成',
+                    'message': f'导入完成，成功 {success_count} 条，失败 {failed_count} 条；证书已开始后台生成',
                     'data': {
                         'total_count': total_count,
                         'success_count': success_count,
                         'failed_count': failed_count,
                         'error_log_available': error_log_content is not None,
                         'import_log_id': import_log.id,
-                        'zip_available': True,
-                        'zip_download_url': f'/api/admin/download-awards-zip/{import_log.id}'
+                        'task_id': task_id
                     }
                 })
 
