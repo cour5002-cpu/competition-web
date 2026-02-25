@@ -169,8 +169,8 @@ def _wx_send_audit_subscribe(openid: str, event_name: str, status_text: str, rev
         data = {
             # Note: keyword IDs must match the selected subscribe message template.
             # Current template keywords: 赛事名称、报名情况
-            'thing4': {'value': event_val},
-            'thing1': {'value': status_val},
+            'thing1': {'value': event_val},
+            'thing4': {'value': status_val},
             'time11': {'value': reviewed_at_str},
             'thing29': {'value': reason_val}
         }
