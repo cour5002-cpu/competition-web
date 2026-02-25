@@ -151,6 +151,8 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
                         participants = sorted(application.participants, key=lambda p: p.seq_no)
                         name_part = "、".join([p.participant_name for p in participants]) if participants else ''
 
+                        _normalize_application_for_cert(application)
+
                         template_config, err = _pick_template_config(
                             CertificateTemplate,
                             generator,
@@ -352,6 +354,29 @@ def _find_awarded_application_for_coach(*, teacher_name: str, teacher_phone_hash
     ).order_by(Application.created_at.desc()).first()
 
 
+def _strip_category_sai_suffix(application):
+    try:
+        cat = str(getattr(application, 'category', '') or '')
+        if cat.endswith('赛'):
+            setattr(application, 'category', cat[:-1])
+    except Exception:
+        pass
+
+
+def _strip_task_sai_suffix(application):
+    try:
+        task = str(getattr(application, 'task', '') or '')
+        if task.endswith('赛'):
+            setattr(application, 'task', task[:-1])
+    except Exception:
+        pass
+
+
+def _normalize_application_for_cert(application):
+    _strip_category_sai_suffix(application)
+    _strip_task_sai_suffix(application)
+
+
 def _apply_student_award_level_red(template_config):
     try:
         template_config = dict(template_config or {})
@@ -474,6 +499,8 @@ def generate_certificate(application_id):
             return cached_resp
 
         generator = CertificateGenerator()
+
+        _normalize_application_for_cert(application)
 
         # 选手证书：甲方未提供二/三等奖模板前，统一使用“一等奖”模板
         template_config, err = _pick_template_config(
