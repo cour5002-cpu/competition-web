@@ -141,7 +141,7 @@ def _wx_send_audit_subscribe(openid: str, event_name: str, status_text: str, rev
 
         template_id = str(os.environ.get('WX_SUBSCRIBE_AUDIT_TEMPLATE_ID', '') or '').strip()
         if not template_id:
-            template_id = 'a1s7ioFW5JEliylSx1hGJSd35x01NrKTFadK54XnuHY'
+            template_id = 'V7IE8Z9XbxvZ6fm8-8pftsXZ4eJEMCdtSALk-Xd0u7A'
 
         tok = _wx_get_access_token()
         if not tok.get('success'):
