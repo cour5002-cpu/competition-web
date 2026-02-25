@@ -227,8 +227,14 @@ class CertificateGenerator:
             return application.participants[0].participant_name if application.participants else ""
         if field_name == 'contact_name':
             return _norm(getattr(application, 'contact_name', '') or '')
+        if field_name == 'category':
+            v = _norm(getattr(application, 'category', '') or '')
+            try:
+                return v[:-1] if isinstance(v, str) and v.endswith('赛') else v
+            except Exception:
+                return v
         if field_name == 'category_task':
-            return _norm(f"{application.category} - {application.task}")
+            return _norm(f"{self.get_field_text(application, 'category')} - {self.get_field_text(application, 'task')}")
         if field_name == 'award_level':
             return _norm(application.award_level or "")
         if field_name == 'education_level':
@@ -971,7 +977,7 @@ class CertificateGenerator:
             if 'project' in template_config:
                 project_config = template_config['project']
                 project_font = project_config.get('font')
-                project_text = f"{application.category} - {application.task}"
+                project_text = f"{self.get_field_text(application, 'category')} - {self.get_field_text(application, 'task')}"
                 self.draw_centered_text(
                     canvas_obj,
                     project_text,
