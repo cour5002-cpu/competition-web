@@ -1,7 +1,7 @@
 <template>
   <view class="auth-page">
     <view class="hero">
-      <image class="hero-logo" src="/static/logo.png" mode="aspectFit"></image>
+      <image class="hero-logo" src="/static/tab-home.png" mode="aspectFit"></image>
       <text class="hero-title">青少年无人机大赛</text>
       <text class="hero-subtitle">报名、查询、证书一站式完成</text>
     </view>

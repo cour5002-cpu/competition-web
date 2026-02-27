@@ -6,8 +6,12 @@ from datetime import datetime
 import os
 import threading
 import uuid
+import logging
 
 from PIL import Image
+
+from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import OperationalError
 
 from admin_auth import require_admin
 from user_auth import require_user
@@ -15,8 +19,11 @@ from user_auth import require_user
 certificate_bp = Blueprint('certificate', __name__)
 
 
-_CERT_CACHE_DIR = os.path.join(os.getcwd(), 'generated_certs')
-_CERT_TASK_DIR = os.path.join(os.getcwd(), 'generated_cert_tasks')
+_CERT_BASE_DIR = str(os.environ.get('CERT_STORAGE_DIR', '') or '').strip() or os.path.join('/tmp', 'competition-web-certs')
+_CERT_CACHE_DIR = os.path.join(_CERT_BASE_DIR, 'generated_certs')
+_CERT_TASK_DIR = os.path.join(_CERT_BASE_DIR, 'generated_cert_tasks')
+
+_logger = logging.getLogger(__name__)
 
 
 def _ensure_dir(p: str):
@@ -129,12 +136,32 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
             from models import Application, CertificateTemplate
             from certificate_generator import CertificateGenerator
 
+            _ensure_dir(_CERT_CACHE_DIR)
+            _ensure_dir(_CERT_TASK_DIR)
+
             with flask_app.app_context():
                 ids = meta.get('application_ids') or []
-                applications = Application.query.filter(
-                    Application.id.in_(ids),
-                    Application.award_level.isnot(None)
-                ).all()
+
+                def _load_applications():
+                    return Application.query.options(joinedload(Application.participants)).filter(
+                        Application.id.in_(ids),
+                        Application.award_level.isnot(None)
+                    ).all()
+
+                try:
+                    applications = _load_applications()
+                except OperationalError as e:
+                    msg = str(e)
+                    if '2013' in msg or 'Lost connection to MySQL server' in msg:
+                        try:
+                            from app import db
+                            db.session.rollback()
+                            db.session.remove()
+                        except Exception:
+                            pass
+                        applications = _load_applications()
+                    else:
+                        raise
 
                 generator = CertificateGenerator()
 
@@ -224,6 +251,10 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
                                 meta['error_details'] = meta['error_details'][-50:]
                         except Exception:
                             pass
+                        try:
+                            _logger.exception('certificate task %s application %s failed', task_id, getattr(application, 'id', None))
+                        except Exception:
+                            pass
 
                     try:
                         meta['progress']['done_applications'] = int(idx + 1)
@@ -244,6 +275,10 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
             except Exception:
                 pass
             _write_json(meta_path, meta)
+            try:
+                _logger.exception('certificate task %s failed', task_id)
+            except Exception:
+                pass
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()

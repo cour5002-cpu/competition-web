@@ -1,7 +1,7 @@
 <template>
   <view class="container">
     <view class="header">
-      <image class="logo" src="/static/logo.png" mode="aspectFit"></image>
+      <image class="logo" src="/static/tab-home.png" mode="aspectFit"></image>
       <text class="title">青少年无人机大赛</text>
       <text class="subtitle">报名、查询、证书一站式完成</text>
     </view>
