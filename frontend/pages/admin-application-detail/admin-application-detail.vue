@@ -199,10 +199,6 @@ export default {
       if (this.loading) return
 
       const reason = String(this.rejectReason || '').trim()
-      if (!reason) {
-        uni.showToast({ title: '请输入退回原因', icon: 'none' })
-        return
-      }
 
       this.loading = true
       try {

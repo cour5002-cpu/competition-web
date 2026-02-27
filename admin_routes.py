@@ -725,8 +725,6 @@ def admin_reject_application(application_id):
 
         data = request.get_json() or {}
         reason = str(data.get('reason', '') or '').strip()
-        if not reason:
-            return jsonify({'success': False, 'message': '请提供退回原因'}), 400
 
         application = Application.query.get(application_id)
         if not application:
@@ -736,7 +734,7 @@ def admin_reject_application(application_id):
         reviewer = str(payload.get('username', '') or '').strip() or None
 
         application.status = 'rejected'
-        application.rejected_reason = reason
+        application.rejected_reason = reason or None
         application.reviewed_at = datetime.utcnow()
         application.reviewed_by = reviewer
 
