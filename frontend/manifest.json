@@ -1,6 +1,6 @@
 {
     "name" : "青少年无人机大赛",
-    "appid" : "wx6136df91e6f9ded5",
+    "appid" : "wxac29586df6538412",
     "description" : "青少年无人机大赛小程序",
     "versionName" : "1.0.0",
     "versionCode" : "100",
@@ -35,7 +35,7 @@
     },
     "quickapp" : {},
     "mp-weixin" : {
-        "appid" : "wx6136df91e6f9ded5",
+        "appid" : "wxac29586df6538412",
         "setting" : {
             "urlCheck" : false
         },

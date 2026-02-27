@@ -40,7 +40,7 @@
         <button class="btn-approve" :disabled="loading || !canApprove" @click="approve">通过</button>
         <button class="btn-reject" :disabled="loading" @click="openReject">退回</button>
       </view>
-      <view class="tip">退回需填写原因。通过/退回后状态会更新，并尝试发送通知。</view>
+      <view class="tip">退回原因选填。通过/退回后状态会更新，并尝试发送通知。</view>
     </view>
 
     <view class="footer">
@@ -49,8 +49,8 @@
 
     <view v-if="rejectVisible" class="modal-mask">
       <view class="modal">
-        <text class="modal-title">退回原因（必填）</text>
-        <textarea v-model="rejectReason" class="textarea" placeholder="请输入退回原因"></textarea>
+        <text class="modal-title">退回原因（选填）</text>
+        <textarea v-model="rejectReason" class="textarea" placeholder="请输入退回原因（选填）"></textarea>
         <view class="btn-row">
           <button class="btn-secondary" @click="closeReject" :disabled="loading">取消</button>
           <button class="btn-reject" @click="reject" :disabled="loading">确认退回</button>
