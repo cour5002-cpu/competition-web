@@ -13,12 +13,13 @@ ENV PIP_RETRIES=5
 WORKDIR /app
 
 RUN set -eux; \
-  apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update; \
-  apt-get install -y --no-install-recommends ca-certificates; \
-  if [ "${INSTALL_FONTS}" = "1" ]; then \
-    apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends fonts-noto-cjk; \
-  fi; \
-  rm -rf /var/lib/apt/lists/*
+  if apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update; then \
+    apt-get install -y --no-install-recommends ca-certificates || true; \
+    if [ "${INSTALL_FONTS}" = "1" ]; then \
+      apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends fonts-noto-cjk || true; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*; \
+  fi
 
 COPY requirements.txt /app/requirements.txt
 RUN set -eux; \

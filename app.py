@@ -137,56 +137,56 @@ def _ensure_default_certificate_templates():
             def _player_default_config():
                 return {
                     'background_image': 'assets/cert/player.png',
-                    'global_y_offset': -6,
+                    'background_fit': 'contain',
+                    'coord_unit': 'px',
+                    'y_origin': 'top',
+                    'use_background_size': True,
+                    'global_y_offset': 0,
                     'debug_points': False,
                     'texts': [
                         {
-                            'field': 'participants_names',
-                            'font': '宋体',
-                            'font_size': 16,
-                            'line_height': 18,
-                            'wrap': True,
-                            'max_lines': 2,
-                            'align': 'center',
-                            'direction': 'up',
-                            'width': 25.05,
-                            'x': 37.39,
-                            'x_anchor': 'left',
-                            'y': 128.37,
-                            'y_offset': 6
-                        },
-                        {
+                            # 赛别：x=676-839, y=447-479 (top-origin px)
                             'field': 'category',
                             'font': '宋体',
-                            'font_size': 16,
+                            'font_size': 24,
                             'align': 'center',
-                            'width': 60,
-                            'x': 60,
-                            'x_anchor': 'center',
-                            'y': 121,
-                            'y_offset': 6
+                            'width': 163,
+                            'x': 676,
+                            'x_anchor': 'left',
+                            'y': 468,
                         },
                         {
+                            # 组别：x=874-1093, y=447-479
                             'field': 'education_level',
                             'font': '宋体',
-                            'font_size': 16,
+                            'font_size': 24,
                             'align': 'center',
-                            'width': 60,
-                            'x': 135,
-                            'x_anchor': 'center',
-                            'y': 121,
-                            'y_offset': 6
+                            'width': 219,
+                            'x': 874,
+                            'x_anchor': 'left',
+                            'y': 468,
                         },
                         {
+                            # 奖项级别：y=483-620，要求水平居中显示
                             'field': 'award_level',
                             'font': '华文楷体',
                             'font_size': 84,
                             'align': 'center',
-                            'width': 150,
-                            'x': 29.5,
+                            'width': 1187,
+                            'x': 37,
                             'x_anchor': 'left',
-                            'y': 74,
-                            'y_offset': 2
+                            'y': 560,
+                        },
+                        {
+                            # 选手姓名（截图中位于标题下方居中，先用可配置的大居中框）
+                            'field': 'participants_names',
+                            'font': '宋体',
+                            'font_size': 28,
+                            'align': 'center',
+                            'width': 1187,
+                            'x': 37,
+                            'x_anchor': 'left',
+                            'y': 410,
                         }
                     ]
                 }
@@ -265,6 +265,102 @@ def _ensure_default_certificate_templates():
                     cfg = t.get_config() or {}
                 except Exception:
                     cfg = {}
+
+                # Repair layout defaults for player template to avoid blank areas.
+                try:
+                    if str(getattr(t, 'award_level', '') or '').strip() == '一等奖':
+                        need_reset = False
+                        if not isinstance(cfg, dict):
+                            need_reset = True
+                        else:
+                            if str(cfg.get('coord_unit', '') or '').strip().lower() != 'px':
+                                need_reset = True
+                            if str(cfg.get('y_origin', '') or '').strip().lower() != 'top':
+                                need_reset = True
+                            if not bool(cfg.get('use_background_size')):
+                                need_reset = True
+                            if not cfg.get('background_image'):
+                                need_reset = True
+                            if not (isinstance(cfg.get('texts'), list) and len(cfg.get('texts')) >= 3):
+                                need_reset = True
+
+                            # Ensure the centered boxes are aligned with x=37..1224.
+                            try:
+                                texts = cfg.get('texts') if isinstance(cfg, dict) else None
+                                if isinstance(texts, list):
+                                    for it in texts:
+                                        if not isinstance(it, dict):
+                                            continue
+                                        f = str(it.get('field', '') or '').strip()
+                                        if f in ('award_level', 'participants_names'):
+                                            if int(it.get('x', -9999) or 0) != 37:
+                                                need_reset = True
+                                            if int(it.get('width', -9999) or 0) != 1187:
+                                                need_reset = True
+                            except Exception:
+                                pass
+
+                        if need_reset:
+                            t.set_config(_player_default_config())
+                            dirty = True
+                        else:
+                            # Template structure is OK; still sync key layout fields to latest numbers.
+                            try:
+                                cfg2 = dict(cfg or {})
+                                texts = cfg2.get('texts') if isinstance(cfg2.get('texts'), list) else []
+                                changed = False
+
+                                def _sync_item(field_name: str, patch: dict):
+                                    nonlocal changed
+                                    for it in texts:
+                                        if not isinstance(it, dict):
+                                            continue
+                                        if str(it.get('field', '') or '').strip() != field_name:
+                                            continue
+                                        for k, v in patch.items():
+                                            if it.get(k) != v:
+                                                it[k] = v
+                                                changed = True
+                                        return
+
+                                # Sync based on user-provided px coordinates.
+                                _sync_item('category', {
+                                    'font_size': 24,
+                                    'width': 163,
+                                    'x': 676,
+                                    'x_anchor': 'left',
+                                    'y': 468,
+                                })
+                                _sync_item('education_level', {
+                                    'font_size': 24,
+                                    'width': 219,
+                                    'x': 874,
+                                    'x_anchor': 'left',
+                                    'y': 468,
+                                })
+                                _sync_item('award_level', {
+                                    'width': 1187,
+                                    'x': 37,
+                                    'x_anchor': 'left',
+                                    'y': 560,
+                                })
+                                # NOTE: reportlab drawString y is baseline; nudge down slightly.
+                                _sync_item('participants_names', {
+                                    'font_size': 28,
+                                    'width': 1187,
+                                    'x': 37,
+                                    'x_anchor': 'left',
+                                    'y': 420,
+                                })
+
+                                if changed:
+                                    cfg2['texts'] = texts
+                                    t.set_config(cfg2)
+                                    dirty = True
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
 
                 if _has_texts(cfg):
                     continue

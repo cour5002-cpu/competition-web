@@ -487,7 +487,33 @@ class CertificateGenerator:
             if bg_path and os.path.exists(bg_path):
                 try:
                     img = ImageReader(bg_path)
-                    canvas_obj.drawImage(img, 0, 0, width=self.page_width, height=self.page_height, mask='auto')
+                    # IMPORTANT: avoid distorting landscape background images into portrait pages.
+                    # Default behavior is to keep aspect ratio (contain) and center the image.
+                    fit = str(template_config.get('background_fit', 'contain') or 'contain').lower()
+                    keep_aspect = template_config.get('background_keep_aspect')
+                    if keep_aspect is None:
+                        keep_aspect = fit != 'stretch'
+                    keep_aspect = bool(keep_aspect)
+
+                    if keep_aspect:
+                        iw_px, ih_px = img.getSize()
+                        iw_pt, ih_pt = self.px_to_pt(iw_px), self.px_to_pt(ih_px)
+                        if iw_pt and ih_pt:
+                            if fit == 'cover':
+                                scale = max(float(self.page_width) / float(iw_pt), float(self.page_height) / float(ih_pt))
+                            else:
+                                # contain
+                                scale = min(float(self.page_width) / float(iw_pt), float(self.page_height) / float(ih_pt))
+                            draw_w = float(iw_pt) * float(scale)
+                            draw_h = float(ih_pt) * float(scale)
+                            x = (float(self.page_width) - draw_w) / 2.0
+                            y = (float(self.page_height) - draw_h) / 2.0
+                            canvas_obj.drawImage(img, x, y, width=draw_w, height=draw_h, mask='auto')
+                        else:
+                            canvas_obj.drawImage(img, 0, 0, width=self.page_width, height=self.page_height, mask='auto')
+                    else:
+                        # stretch (legacy behavior)
+                        canvas_obj.drawImage(img, 0, 0, width=self.page_width, height=self.page_height, mask='auto')
                 except Exception:
                     pass
 

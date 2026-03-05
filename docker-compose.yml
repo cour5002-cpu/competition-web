@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         - PIP_INDEX_URL=${PIP_INDEX_URL:-https://pypi.org/simple}
+        - INSTALL_FONTS=${INSTALL_FONTS:-1}
     container_name: competition-web
     ports:
       - "5000:5000"

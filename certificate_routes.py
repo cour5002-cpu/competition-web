@@ -574,30 +574,43 @@ def generate_certificate(application_id):
                     bg_w = None
 
             stamp_count = 6
-            stamp_margin = 80
+
+            # Student certificate coordinates are px with top-origin.
+            # Reserve stamps horizontally centered within x=37..1224 and vertically within y=663..851.
+            x_left = 37
+            x_right = 1224
+            y_top = 663
+            y_bottom = 851
+            y_center = int((int(y_top) + int(y_bottom)) / 2)
+
+            span_w = max(1, int(x_right) - int(x_left))
             stamp_gap = 30
-            if bg_w:
-                stamp_w = max(60, int((int(bg_w) - 2 * stamp_margin - stamp_gap * (stamp_count - 1)) / stamp_count))
-            else:
-                # Safe fallback when background image is unknown/unreadable.
-                stamp_w = 120
+            stamp_w = int((span_w - stamp_gap * (stamp_count - 1)) / stamp_count)
+            stamp_w = max(50, min(180, stamp_w))
+
+            total_w = stamp_w * stamp_count + stamp_gap * (stamp_count - 1)
+            start_x = int(x_left) + int((span_w - total_w) / 2)
+
+            stamps = []
+            for i in range(stamp_count):
+                stamps.append({
+                    'image': f"assets/cert/stamps/player/{i + 1}.png",
+                    'fallback_images': [
+                        'assets/cert/测试盖章.png',
+                        'assets/cert/test.png',
+                    ],
+                    'x': int(start_x + i * (stamp_w + stamp_gap)),
+                    'y': int(y_center),
+                    'width': int(stamp_w),
+                    'height': int(stamp_w),
+                    'unit': 'px',
+                    'y_origin': 'top',
+                    'y_anchor': 'center',
+                    'keep_aspect': True,
+                })
 
             template_config = dict(template_config or {})
-            template_config.update({
-                'stamp_images': _build_centered_stamp_images(
-                    cert_kind='player',
-                    count=stamp_count,
-                    width=stamp_w,
-                    height=stamp_w,
-                    gap=stamp_gap,
-                    y=140,
-                    unit='px',
-                    y_origin='bottom',
-                    y_anchor='center',
-                    keep_aspect=True,
-                    dx=68,
-                ),
-            })
+            template_config.update({'stamp_images': stamps})
         except Exception:
             pass
         

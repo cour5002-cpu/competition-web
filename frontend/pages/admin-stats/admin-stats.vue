@@ -45,13 +45,25 @@
 
         <view v-else>
           <view v-if="chartType === 'bar'">
-            <canvas
-              class="chart-canvas"
-              canvas-id="barCanvas"
-              :style="{ width: canvasWidthPx + 'px', height: canvasHeightPx + 'px' }"
-              :width="canvasWidthPx"
-              :height="canvasHeightPx"
-            ></canvas>
+            <scroll-view class="chart-scroll" scroll-x="true" :style="{ width: viewportWidthPx + 'px' }">
+              <canvas
+                class="chart-canvas"
+                canvas-id="barCanvas"
+                :style="{ width: canvasWidthPx + 'px', height: canvasHeightPx + 'px' }"
+                :width="canvasWidthPx"
+                :height="canvasHeightPx"
+              ></canvas>
+            </scroll-view>
+
+            <view class="rank" v-if="rankedItems && rankedItems.length">
+              <view v-for="(it, idx) in rankedItems" :key="idx" class="rank-row">
+                <view class="rank-left">
+                  <view class="rank-dot" :style="{ backgroundColor: colorOf(idx) }"></view>
+                  <view class="rank-label">{{ it.label }}</view>
+                </view>
+                <view class="rank-right">{{ it.count }}（{{ percent(it.count) }}）</view>
+              </view>
+            </view>
           </view>
 
           <view v-else>
@@ -109,9 +121,11 @@ export default {
 
       loading: false,
       items: [],
+      rankedItems: [],
       total: 0,
       maxCount: 0,
 
+      viewportWidthPx: 320,
       canvasWidthPx: 320,
       canvasHeightPx: 240
     }
@@ -127,7 +141,8 @@ export default {
     try {
       const sys = uni.getSystemInfoSync()
       const w = Number((sys && sys.windowWidth) || 375)
-      this.canvasWidthPx = Math.max(260, w - 40)
+      this.viewportWidthPx = Math.max(260, w - 40)
+      this.canvasWidthPx = this.viewportWidthPx
       this.canvasHeightPx = 240
     } catch (e) {}
 
@@ -157,7 +172,10 @@ export default {
 
     setChartType(t) {
       this.chartType = t
-      this.drawChart()
+      this.$nextTick(() => {
+        this.recomputeCanvasSize()
+        this.drawChart()
+      })
     },
 
     async loadCategories() {
@@ -196,11 +214,15 @@ export default {
         const total = normalized.reduce((s, x) => s + (Number(x.count) || 0), 0)
         const maxCount = normalized.reduce((m, x) => Math.max(m, Number(x.count) || 0), 0)
 
+        const ranked = normalized.slice().sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0))
+
         this.items = normalized
+        this.rankedItems = ranked
         this.total = total
         this.maxCount = maxCount
 
         this.$nextTick(() => {
+          this.recomputeCanvasSize()
           this.drawChart()
         })
       } catch (e) {
@@ -208,6 +230,20 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+
+    recomputeCanvasSize() {
+      try {
+        const n = (this.items && this.items.length) ? this.items.length : 0
+        const paddingLeft = 40
+        const paddingRight = 16
+        const gap = 16
+        const barW = 28
+        const plotW = Math.max(1, n * barW + (n + 1) * gap)
+        const needW = paddingLeft + paddingRight + plotW
+        const vw = Number(this.viewportWidthPx) || 320
+        this.canvasWidthPx = Math.max(vw, Math.floor(needW))
+      } catch (e) {}
     },
 
     drawChart() {
@@ -260,8 +296,8 @@ export default {
       }
 
       const n = this.items.length
-      const gap = 10
-      const barW = Math.max(8, Math.floor((plotW - gap * (n + 1)) / n))
+      const gap = 16
+      const barW = 28
 
       for (let i = 0; i < n; i++) {
         const item = this.items[i]
@@ -280,7 +316,7 @@ export default {
 
         // x labels (truncate)
         const label = String(item.label || '')
-        const shortLabel = label.length > 6 ? label.slice(0, 6) + '…' : label
+        const shortLabel = label.length > 8 ? label.slice(0, 8) + '…' : label
         ctx.setFillStyle('#374151')
         ctx.setFontSize(10)
         ctx.fillText(shortLabel, x, paddingTop + plotH + 18)
@@ -477,6 +513,53 @@ export default {
   display: block;
   background-color: #fff;
   border-radius: 12px;
+}
+
+.chart-scroll {
+  overflow: hidden;
+}
+
+.rank {
+  margin-top: 12px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.rank-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.rank-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex: 0 0 auto;
+}
+
+.rank-label {
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-right {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 12px;
+  flex: 0 0 auto;
 }
 
 .legend {
