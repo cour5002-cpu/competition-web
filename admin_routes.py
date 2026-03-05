@@ -506,7 +506,11 @@ def admin_stats_applications():
         dimension = str(request.args.get('dimension', '') or '').strip().lower() or 'school'
         status = str(request.args.get('status', '') or '').strip()
         category = str(request.args.get('category', '') or '').strip()
-        top_n = request.args.get('top_n', 20, type=int)
+        top_n_raw = request.args.get('top_n', None)
+        try:
+            top_n = int(top_n_raw) if top_n_raw is not None and str(top_n_raw).strip() != '' else None
+        except Exception:
+            top_n = None
 
         if dimension not in ['school', 'education_level']:
             return jsonify({'success': False, 'message': 'dimension 仅支持 school 或 education_level'}), 400
@@ -523,7 +527,7 @@ def admin_stats_applications():
             q = q.filter(Application.category == category)
 
         q = q.group_by(dim_col).order_by(func.count(Application.id).desc())
-        if top_n and top_n > 0:
+        if top_n is not None and top_n > 0:
             q = q.limit(top_n)
 
         rows = q.all()

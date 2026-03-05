@@ -199,7 +199,7 @@ export default {
         const status = this.statusOptions[this.statusIndex].value
         const category = (this.categoryOptions[this.categoryIndex] && this.categoryOptions[this.categoryIndex].value) || ''
 
-        const params = { dimension: dim, top_n: 20 }
+        const params = { dimension: dim }
         if (status) params.status = status
         if (category) params.category = category
 
@@ -262,7 +262,7 @@ export default {
       const paddingLeft = 40
       const paddingRight = 16
       const paddingTop = 16
-      const paddingBottom = 44
+      const paddingBottom = 72
 
       ctx.setFillStyle('#ffffff')
       ctx.fillRect(0, 0, W, H)
@@ -283,6 +283,9 @@ export default {
       // y ticks
       ctx.setFontSize(10)
       ctx.setFillStyle('#6b7280')
+      try {
+        ctx.setTextAlign('left')
+      } catch (e) {}
       const ticks = 4
       for (let i = 0; i <= ticks; i++) {
         const y = paddingTop + plotH - (plotH * i) / ticks
@@ -299,11 +302,34 @@ export default {
       const gap = 16
       const barW = 28
 
+      const wrapLabelLines = (text, maxCharsPerLine, maxLines) => {
+        try {
+          const s = String(text || '')
+          const m = Math.max(1, Number(maxCharsPerLine) || 6)
+          const lines = []
+          for (let i = 0; i < s.length; i += m) {
+            lines.push(s.slice(i, i + m))
+            if (lines.length >= (Number(maxLines) || 3)) break
+          }
+          if (s.length > lines.join('').length && lines.length) {
+            lines[lines.length - 1] = lines[lines.length - 1].slice(0, Math.max(0, m - 1)) + '…'
+          }
+          return lines.length ? lines : ['']
+        } catch (e) {
+          return [String(text || '')]
+        }
+      }
+
+      try {
+        ctx.setTextAlign('center')
+      } catch (e) {}
+
       for (let i = 0; i < n; i++) {
         const item = this.items[i]
         const v = Number(item.count) || 0
         const h = Math.round((v / maxV) * plotH)
         const x = paddingLeft + gap + i * (barW + gap)
+        const cx = x + Math.floor(barW / 2)
         const y = paddingTop + plotH - h
 
         ctx.setFillStyle(this.colorOf(i))
@@ -312,14 +338,18 @@ export default {
         // value on top
         ctx.setFillStyle('#111827')
         ctx.setFontSize(10)
-        ctx.fillText(String(v), x, Math.max(paddingTop + 10, y - 4))
+        ctx.fillText(String(v), cx, Math.max(paddingTop + 10, y - 4))
 
-        // x labels (truncate)
+        // x labels (wrap)
         const label = String(item.label || '')
-        const shortLabel = label.length > 8 ? label.slice(0, 8) + '…' : label
         ctx.setFillStyle('#374151')
         ctx.setFontSize(10)
-        ctx.fillText(shortLabel, x, paddingTop + plotH + 18)
+        const lines = wrapLabelLines(label, 4, 3)
+        const lineH = 12
+        const baseY = paddingTop + plotH + 16
+        for (let li = 0; li < lines.length; li++) {
+          ctx.fillText(lines[li], cx, baseY + li * lineH)
+        }
       }
 
       ctx.draw()

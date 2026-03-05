@@ -69,8 +69,7 @@
     {
       "path": "pages/admin-stats/admin-stats",
       "style": {
-        "navigationBarTitleText": "可视化统计",
-        "pageOrientation": "landscape"
+        "navigationBarTitleText": "可视化统计"
       }
     },
     {
