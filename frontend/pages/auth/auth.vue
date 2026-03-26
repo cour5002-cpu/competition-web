@@ -15,7 +15,16 @@
       <view v-if="mode === 'wechat'" class="panel-body">
         <text class="panel-title">微信授权登录</text>
         <text class="panel-desc">用于报名与证书查询。我们不会公开你的微信信息。</text>
-        <button class="btn btn-wechat" :disabled="loading" @click="handleWeChatLogin">
+        <view class="consent">
+          <label class="consent-label" @click="toggleConsent">
+            <checkbox class="consent-checkbox" :checked="consentChecked" />
+            <text>登录即表示同意</text>
+          </label>
+          <text class="consent-link" @click="openUserAgreement">《用户服务协议》</text>
+          <text>与</text>
+          <text class="consent-link" @click="openPrivacyPolicy">《隐私政策》</text>
+        </view>
+        <button class="btn btn-wechat" :disabled="loading || !consentChecked" @click="handleWeChatLogin">
           {{ loading ? '登录中...' : '微信一键登录' }}
         </button>
         <text v-if="errorMsg" class="form-error">{{ errorMsg }}</text>
@@ -63,6 +72,7 @@ export default {
       password: '',
       loading: false,
       errorMsg: '',
+      consentChecked: false,
       year: new Date().getFullYear()
     }
   },
@@ -73,8 +83,24 @@ export default {
   },
 
   methods: {
+    toggleConsent() {
+      this.consentChecked = !this.consentChecked
+    },
+
+    openUserAgreement() {
+      uni.navigateTo({ url: '/pages/user-agreement/user-agreement' })
+    },
+
+    openPrivacyPolicy() {
+      uni.navigateTo({ url: '/pages/privacy-policy/privacy-policy' })
+    },
+
     async handleWeChatLogin() {
       if (this.loading) return
+      if (!this.consentChecked) {
+        uni.showToast({ title: '请先同意协议与隐私政策', icon: 'none' })
+        return
+      }
       this.errorMsg = ''
       this.loading = true
       try {
@@ -265,6 +291,30 @@ export default {
   margin-top: 12px;
   color: #ef4444;
   font-size: 12px;
+}
+
+.consent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  color: rgba(15, 23, 42, 0.62);
+  font-size: 12px;
+}
+
+.consent-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.consent-checkbox {
+  transform: scale(0.85);
+}
+
+.consent-link {
+  color: #1f4b99;
 }
 
 .footer {

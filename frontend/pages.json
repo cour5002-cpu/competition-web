@@ -25,6 +25,18 @@
       }
     },
     {
+      "path": "pages/user-agreement/user-agreement",
+      "style": {
+        "navigationBarTitleText": "用户服务协议"
+      }
+    },
+    {
+      "path": "pages/privacy-policy/privacy-policy",
+      "style": {
+        "navigationBarTitleText": "隐私政策"
+      }
+    },
+    {
       "path": "pages/coach-award/coach-award",
       "style": {
         "navigationBarTitleText": "优秀辅导员"

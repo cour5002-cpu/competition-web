@@ -78,25 +78,48 @@
           class="input"
         />
       </view>
-      
-      <!-- 指导老师信息 -->
-      <view class="form-item">
-        <text class="label">指导老师姓名 *</text>
-        <input
-          v-model="formData.teacher_name"
-          type="text"
-          placeholder="请输入指导老师姓名"
-          class="input"
-        />
+
+      <!-- 选手信息 -->
+      <view class="form-section" v-if="participantCount > 0">
+        <text class="section-title">选手信息 *</text>
+        <text class="hint">
+          {{ getParticipantHint() }}
+        </text>
+        
+        <view 
+          v-for="(participant, index) in formData.participants" 
+          :key="index"
+          class="participant-item"
+        >
+          <text class="participant-label">选手{{ index + 1 }}姓名 *</text>
+          <input 
+            v-model="participant.participant_name"
+            type="text"
+            :placeholder="`请输入选手${index + 1}姓名`"
+            class="input"
+          />
+        </view>
       </view>
 
+      <!-- 参赛人信息 -->
       <view class="form-item">
-        <text class="label">指导老师电话 *</text>
+        <text class="label">参赛人手机号 *</text>
         <input
-          v-model="formData.teacher_phone"
+          v-model="formData.participant_phone"
           type="number"
           placeholder="请输入11位手机号"
           maxlength="11"
+          class="input"
+        />
+        <text v-if="phoneCheckTip" class="field-tip" :class="phoneCheckTipClass">{{ phoneCheckTip }}</text>
+      </view>
+
+      <view class="form-item">
+        <text class="label">参赛人邮箱 *</text>
+        <input
+          v-model="formData.participant_email"
+          type="email"
+          placeholder="请输入邮箱地址"
           class="input"
         />
       </view>
@@ -123,54 +146,43 @@
         />
       </view>
 
-      <!-- 参赛人信息 -->
+      <!-- 指导老师信息 -->
       <view class="form-item">
-        <text class="label">参赛人手机号 *</text>
+        <text class="label">指导老师姓名 *</text>
         <input
-          v-model="formData.participant_phone"
-          type="number"
-          placeholder="请输入11位手机号"
-          maxlength="11"
+          v-model="formData.teacher_name"
+          type="text"
+          placeholder="请输入指导老师姓名"
           class="input"
         />
       </view>
 
       <view class="form-item">
-        <text class="label">参赛人邮箱 *</text>
+        <text class="label">指导老师电话 *</text>
         <input
-          v-model="formData.participant_email"
-          type="email"
-          placeholder="请输入邮箱地址"
+          v-model="formData.teacher_phone"
+          type="number"
+          placeholder="请输入11位手机号"
+          maxlength="11"
           class="input"
         />
+        <text v-if="teacherPhoneTip" class="field-tip" :class="teacherPhoneTipClass">{{ teacherPhoneTip }}</text>
       </view>
-      
-      <!-- 选手信息 -->
-      <view class="form-section" v-if="participantCount > 0">
-        <text class="section-title">选手信息 *</text>
-        <text class="hint">
-          {{ getParticipantHint() }}
-        </text>
-        
-        <view 
-          v-for="(participant, index) in formData.participants" 
-          :key="index"
-          class="participant-item"
-        >
-          <text class="participant-label">选手{{ index + 1 }}姓名 *</text>
-          <input 
-            v-model="participant.participant_name"
-            type="text"
-            :placeholder="`请输入选手${index + 1}姓名`"
-            class="input"
-          />
-        </view>
+
+      <view class="consent">
+        <label class="consent-label" @click="toggleConsent">
+          <checkbox class="consent-checkbox" :checked="consentChecked" />
+          <text>提交即表示同意</text>
+        </label>
+        <text class="consent-link" @click="openUserAgreement">《用户服务协议》</text>
+        <text>与</text>
+        <text class="consent-link" @click="openPrivacyPolicy">《隐私政策》</text>
       </view>
       
       <!-- 提交按钮 -->
       <button 
         class="submit-btn"
-        :disabled="!canSubmit"
+        :disabled="!canSubmit || !consentChecked"
         @click="handleSubmit"
       >
         {{ isResubmit ? '再次提交' : '提交报名' }}
@@ -224,7 +236,20 @@ export default {
       },
 
       isResubmit: false,
-      resubmitApplicationId: ''
+      resubmitApplicationId: '',
+      consentChecked: false,
+      phoneCheck: {
+        status: '',
+        checking: false,
+        exists: false
+      },
+      phoneCheckTimer: null
+    }
+  },
+
+  watch: {
+    'formData.participant_phone': function (val) {
+      this.schedulePhoneCheck(val)
     }
   },
   
@@ -243,6 +268,12 @@ export default {
       if (!this.formData.teacher_name || !this.formData.teacher_phone) return false
       if (!this.formData.leader_name || !this.formData.leader_phone) return false
       if (!this.formData.participant_phone || !this.formData.participant_email) return false
+
+      if (!this.isValidPhone(this.formData.teacher_phone)) return false
+      if (!this.isValidPhone(this.formData.leader_phone)) return false
+      if (!this.isValidPhone(this.formData.participant_phone)) return false
+      if (this.phoneCheck && this.phoneCheck.checking) return false
+      if (this.phoneCheck && this.phoneCheck.exists) return false
       
       // 检查选手信息
       if (this.participantCount === 0) return false
@@ -253,6 +284,41 @@ export default {
       }
       
       return true
+    },
+
+    phoneCheckTip() {
+      const phone = String(this.formData.participant_phone || '').trim()
+      if (!phone) return ''
+
+      if (phone.length < 11) return ''
+      if (!this.isValidPhone(phone)) return '手机号格式不正确'
+      if (this.phoneCheck && this.phoneCheck.checking) return '正在校验手机号...'
+      if (this.phoneCheck && this.phoneCheck.exists) return '该手机号已存在待审核或已通过的报名记录'
+      if (this.phoneCheck && this.phoneCheck.status === 'error') return '手机号校验失败，请稍后重试'
+      if (this.phoneCheck && this.phoneCheck.status === 'ok') return '手机号可用'
+      return ''
+    },
+
+    phoneCheckTipClass() {
+      const tip = this.phoneCheckTip
+      if (!tip) return ''
+      if (tip === '手机号可用') return 'ok'
+      if (tip === '正在校验手机号...') return 'muted'
+      return 'error'
+    },
+
+    teacherPhoneTip() {
+      const phone = String(this.formData.teacher_phone || '').trim()
+      if (!phone) return ''
+      if (phone.length < 11) return ''
+      if (!this.isValidPhone(phone)) return '手机号格式不正确'
+      return ''
+    },
+
+    teacherPhoneTipClass() {
+      const tip = this.teacherPhoneTip
+      if (!tip) return ''
+      return 'error'
     },
 
     taskTextStyle() {
@@ -278,6 +344,67 @@ export default {
   },
   
   methods: {
+    isValidPhone(v) {
+      const s = String(v || '').trim()
+      return /^1[3-9]\d{9}$/.test(s)
+    },
+
+    schedulePhoneCheck(v) {
+      try {
+        if (this.phoneCheckTimer) clearTimeout(this.phoneCheckTimer)
+      } catch (e) {}
+      this.phoneCheckTimer = null
+
+      const phone = String(v || '').trim()
+      if (!phone || phone.length < 11) {
+        this.phoneCheck = { status: '', checking: false, exists: false }
+        return
+      }
+
+      if (!this.isValidPhone(phone)) {
+        this.phoneCheck = { status: 'invalid', checking: false, exists: false }
+        return
+      }
+
+      this.phoneCheck = { status: '', checking: true, exists: false }
+      this.phoneCheckTimer = setTimeout(() => {
+        this.checkPhoneExists(phone)
+      }, 450)
+    },
+
+    async checkPhoneExists(phone) {
+      try {
+        this.phoneCheck = { status: '', checking: true, exists: false }
+        const excludeId = (this.isResubmit && this.resubmitApplicationId) ? this.resubmitApplicationId : ''
+        const res = await request.get('/api/applications/phone-exists', {
+          phone: String(phone || '').trim(),
+          exclude_application_id: excludeId
+        })
+
+        if (res && res.success && res.data) {
+          const exists = !!(res.data && res.data.exists)
+          this.phoneCheck = { status: 'ok', checking: false, exists }
+          return
+        }
+
+        this.phoneCheck = { status: 'error', checking: false, exists: false }
+      } catch (e) {
+        this.phoneCheck = { status: 'error', checking: false, exists: false }
+      }
+    },
+
+    toggleConsent() {
+      this.consentChecked = !this.consentChecked
+    },
+
+    openUserAgreement() {
+      uni.navigateTo({ url: '/pages/user-agreement/user-agreement' })
+    },
+
+    openPrivacyPolicy() {
+      uni.navigateTo({ url: '/pages/privacy-policy/privacy-policy' })
+    },
+
     tryLoadResubmitFromStorage() {
       let id = ''
       try {
@@ -484,6 +611,10 @@ export default {
     },
     
     async handleSubmit() {
+      if (!this.consentChecked) {
+        uni.showToast({ title: '请先同意协议与隐私政策', icon: 'none' })
+        return
+      }
       if (!this.canSubmit) {
         uni.showToast({
           title: '请完善必填信息',
@@ -681,6 +812,11 @@ export default {
       this.participantCount = 0
       this.tasks = []
       this.taskNames = []
+      this.phoneCheck = { status: '', checking: false, exists: false }
+      try {
+        if (this.phoneCheckTimer) clearTimeout(this.phoneCheckTimer)
+      } catch (e) {}
+      this.phoneCheckTimer = null
       
       this.formData = {
         category: '',
@@ -812,6 +948,50 @@ export default {
   font-size: 14px;
   color: rgba(15, 23, 42, 0.78);
   margin-bottom: 5px;
+}
+
+.field-tip {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.field-tip.ok {
+  color: #16a34a;
+}
+
+.field-tip.muted {
+  color: rgba(15, 23, 42, 0.55);
+}
+
+.field-tip.error {
+  color: #ef4444;
+}
+
+.consent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+  padding: 0 4px;
+  color: rgba(15, 23, 42, 0.62);
+  font-size: 12px;
+}
+
+.consent-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.consent-checkbox {
+  transform: scale(0.85);
+}
+
+.consent-link {
+  color: #1f4b99;
 }
 
 .submit-btn {

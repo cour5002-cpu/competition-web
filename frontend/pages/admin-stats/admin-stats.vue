@@ -76,7 +76,7 @@
             ></canvas>
 
             <view class="legend" v-if="items && items.length">
-              <view v-for="(it, idx) in items" :key="idx" class="legend-row">
+              <view v-for="(it, idx) in pieItems()" :key="idx" class="legend-row">
                 <view class="dot" :style="{ backgroundColor: colorOf(idx) }"></view>
                 <view class="legend-label">{{ it.label }}</view>
                 <view class="legend-right">{{ it.count }}（{{ percent(it.count) }}）</view>
@@ -127,7 +127,8 @@ export default {
 
       viewportWidthPx: 320,
       canvasWidthPx: 320,
-      canvasHeightPx: 240
+      canvasHeightPx: 240,
+      pieTopN: 20
     }
   },
 
@@ -176,6 +177,27 @@ export default {
         this.recomputeCanvasSize()
         this.drawChart()
       })
+    },
+
+    pieItems() {
+      try {
+        const list = Array.isArray(this.items) ? this.items.slice() : []
+        const topN = Math.max(1, Number(this.pieTopN) || 20)
+        const ranked = list
+          .map(x => ({ label: String((x && x.label) || ''), count: Number((x && x.count) || 0) }))
+          .filter(x => x.count > 0)
+          .sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0))
+
+        const head = ranked.slice(0, topN)
+        const tail = ranked.slice(topN)
+        const otherCount = tail.reduce((s, x) => s + (Number(x.count) || 0), 0)
+        if (otherCount > 0) {
+          head.push({ label: '其它', count: otherCount })
+        }
+        return head
+      } catch (e) {
+        return Array.isArray(this.items) ? this.items : []
+      }
     },
 
     async loadCategories() {
@@ -234,6 +256,13 @@ export default {
 
     recomputeCanvasSize() {
       try {
+        const vw = Number(this.viewportWidthPx) || 320
+
+        if (this.chartType !== 'bar') {
+          this.canvasWidthPx = vw
+          return
+        }
+
         const n = (this.items && this.items.length) ? this.items.length : 0
         const paddingLeft = 40
         const paddingRight = 16
@@ -241,7 +270,6 @@ export default {
         const barW = 28
         const plotW = Math.max(1, n * barW + (n + 1) * gap)
         const needW = paddingLeft + paddingRight + plotW
-        const vw = Number(this.viewportWidthPx) || 320
         this.canvasWidthPx = Math.max(vw, Math.floor(needW))
       } catch (e) {}
     },
@@ -363,7 +391,8 @@ export default {
       ctx.setFillStyle('#ffffff')
       ctx.fillRect(0, 0, W, H)
 
-      const total = Math.max(0, Number(this.total) || 0)
+      const items = this.pieItems()
+      const total = items.reduce((s, x) => s + (Number((x && x.count) || 0) || 0), 0)
       if (total <= 0) {
         ctx.draw()
         return
@@ -374,8 +403,8 @@ export default {
       const r = Math.max(40, Math.floor(Math.min(W, H) * 0.32))
 
       let start = -Math.PI / 2
-      for (let i = 0; i < this.items.length; i++) {
-        const v = Number(this.items[i].count) || 0
+      for (let i = 0; i < items.length; i++) {
+        const v = Number(items[i].count) || 0
         const angle = (v / total) * Math.PI * 2
         const end = start + angle
         ctx.beginPath()

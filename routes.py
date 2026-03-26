@@ -649,6 +649,44 @@ def get_applications_by_phone():
     except Exception as e:
         return jsonify({'success': False, 'message': '获取数据失败', 'error': str(e)}), 500
 
+
+@api_bp.route('/api/applications/phone-exists', methods=['GET'])
+@require_user()
+def applications_phone_exists():
+    """手机号是否已存在待审核/已通过报名（用于前端实时校验）"""
+    try:
+        from app import app
+        import hashlib
+        from models import Application
+
+        with app.app_context():
+            phone = str(request.args.get('phone', '') or '').strip()
+            if not phone:
+                return jsonify({'success': False, 'message': '请提供手机号'}), 400
+            if not validate_phone(phone):
+                return jsonify({'success': False, 'message': '手机号格式不正确'}), 400
+
+            exclude_id_raw = request.args.get('exclude_application_id', None)
+            exclude_id = None
+            try:
+                if exclude_id_raw is not None and str(exclude_id_raw).strip() != '':
+                    exclude_id = int(exclude_id_raw)
+            except Exception:
+                exclude_id = None
+
+            phone_hash = hashlib.sha256(phone.encode()).hexdigest()
+            q = Application.query.filter(
+                Application.contact_phone_hash == phone_hash,
+                Application.status.in_(['pending', 'approved'])
+            )
+            if exclude_id:
+                q = q.filter(Application.id != exclude_id)
+
+            exists = q.first() is not None
+            return jsonify({'success': True, 'data': {'exists': bool(exists)}})
+    except Exception as e:
+        return jsonify({'success': False, 'message': '获取数据失败', 'error': str(e)}), 500
+
 @api_bp.route('/api/my-applications', methods=['GET'])
 @require_user()
 def get_my_applications():

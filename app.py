@@ -145,26 +145,26 @@ def _ensure_default_certificate_templates():
                     'debug_points': False,
                     'texts': [
                         {
-                            # 赛别：x=676-839, y=447-479 (top-origin px)
+                            # 赛别：x=636-824, y=447-479 (top-origin px)
                             'field': 'category',
-                            'font': '宋体',
-                            'font_size': 24,
+                            'font': '黑体',
+                            'font_size': 28,
                             'align': 'center',
-                            'width': 163,
-                            'x': 676,
+                            'width': 188,
+                            'x': 636,
                             'x_anchor': 'left',
-                            'y': 468,
+                            'y': 473,
                         },
                         {
-                            # 组别：x=874-1093, y=447-479
+                            # 组别：x=862-1134, y=447-479
                             'field': 'education_level',
-                            'font': '宋体',
-                            'font_size': 24,
+                            'font': '黑体',
+                            'font_size': 28,
                             'align': 'center',
-                            'width': 219,
-                            'x': 874,
+                            'width': 272,
+                            'x': 862,
                             'x_anchor': 'left',
-                            'y': 468,
+                            'y': 473,
                         },
                         {
                             # 奖项级别：y=483-620，要求水平居中显示
@@ -180,8 +180,8 @@ def _ensure_default_certificate_templates():
                         {
                             # 选手姓名（截图中位于标题下方居中，先用可配置的大居中框）
                             'field': 'participants_names',
-                            'font': '宋体',
-                            'font_size': 28,
+                            'font': '黑体',
+                            'font_size': 34,
                             'align': 'center',
                             'width': 1187,
                             'x': 37,
@@ -325,14 +325,16 @@ def _ensure_default_certificate_templates():
 
                                 # Sync based on user-provided px coordinates.
                                 _sync_item('category', {
-                                    'font_size': 24,
+                                    'font': '黑体',
+                                    'font_size': 28,
                                     'width': 163,
                                     'x': 676,
                                     'x_anchor': 'left',
                                     'y': 468,
                                 })
                                 _sync_item('education_level', {
-                                    'font_size': 24,
+                                    'font': '黑体',
+                                    'font_size': 28,
                                     'width': 219,
                                     'x': 874,
                                     'x_anchor': 'left',
@@ -346,7 +348,8 @@ def _ensure_default_certificate_templates():
                                 })
                                 # NOTE: reportlab drawString y is baseline; nudge down slightly.
                                 _sync_item('participants_names', {
-                                    'font_size': 28,
+                                    'font': '黑体',
+                                    'font_size': 34,
                                     'width': 1187,
                                     'x': 37,
                                     'x_anchor': 'left',

@@ -1,5 +1,14 @@
 <template>
   <view class="container">
+    <view class="consent">
+      <label class="consent-label" @click="toggleConsent">
+        <checkbox class="consent-checkbox" :checked="consentChecked" />
+        <text>查询即表示同意</text>
+      </label>
+      <text class="consent-link" @click="openUserAgreement">《用户服务协议》</text>
+      <text>与</text>
+      <text class="consent-link" @click="openPrivacyPolicy">《隐私政策》</text>
+    </view>
     <view class="search-bar">
       <input
         v-model="phone"
@@ -8,7 +17,7 @@
         class="search-input"
         maxlength="11"
       />
-      <button class="search-btn" @click="search">查询</button>
+      <button class="search-btn" :disabled="!consentChecked" @click="search">查询</button>
     </view>
 
     <text class="search-hint">请输入报名时填写的参赛人手机号查询报名状态</text>
@@ -110,6 +119,7 @@ export default {
       phone: '',
       applications: [],
       hasSearched: false,
+      consentChecked: false,
       emptyIcon: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(emptySvg)}`,
       searchIcon: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(searchSvg)}`
     }
@@ -128,6 +138,18 @@ export default {
   },
 
   methods: {
+    toggleConsent() {
+      this.consentChecked = !this.consentChecked
+    },
+
+    openUserAgreement() {
+      uni.navigateTo({ url: '/pages/user-agreement/user-agreement' })
+    },
+
+    openPrivacyPolicy() {
+      uni.navigateTo({ url: '/pages/privacy-policy/privacy-policy' })
+    },
+
     resetPage() {
       this.phone = ''
       this.applications = []
@@ -150,6 +172,10 @@ export default {
       })
     },
     async search() {
+      if (!this.consentChecked) {
+        uni.showToast({ title: '请先同意协议与隐私政策', icon: 'none' })
+        return
+      }
       const ok = await auth.requireUserLoginOrRedirect('/pages/application-query/application-query')
       if (!ok) return
 
@@ -229,6 +255,30 @@ export default {
 </script>
 
 <style scoped>
+.consent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  color: rgba(15, 23, 42, 0.62);
+  font-size: 12px;
+}
+
+.consent-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.consent-checkbox {
+  transform: scale(0.85);
+}
+
+.consent-link {
+  color: #1f4b99;
+}
+
 .container {
   padding: 20px;
   background-color: var(--bg);
