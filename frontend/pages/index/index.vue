@@ -61,7 +61,6 @@
 
 <script>
 import * as requestApi from '../../utils/request'
-import auth from '../../utils/auth'
 
 const request = requestApi && requestApi.default ? requestApi.default : requestApi
 
@@ -74,10 +73,6 @@ export default {
   
   onLoad() {
     this.loadCompetitionRules()
-  },
-
-  async onShow() {
-    await auth.requireUserLoginOrRedirect('/pages/index/index')
   },
   
   methods: {

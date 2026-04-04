@@ -125,9 +125,7 @@ export default {
     }
   },
 
-  async onShow() {
-    await auth.requireUserLoginOrRedirect('/pages/application-query/application-query')
-  },
+  async onShow() {},
 
   onHide() {
     this.resetPage()
@@ -176,7 +174,11 @@ export default {
         uni.showToast({ title: '请先同意协议与隐私政策', icon: 'none' })
         return
       }
-      const ok = await auth.requireUserLoginOrRedirect('/pages/application-query/application-query')
+
+      const ok = await auth.confirmUserLoginOrRedirect('/pages/application-query/application-query', {
+        title: '需要登录',
+        content: '查询报名状态需要先登录，是否现在去登录？'
+      })
       if (!ok) return
 
       const phone = String(this.phone || '').trim()

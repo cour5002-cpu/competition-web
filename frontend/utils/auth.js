@@ -12,6 +12,45 @@ export const hasUserToken = () => {
   return true
 }
 
+export const confirmUserLoginOrRedirect = async (
+  redirectUrl = '/pages/index/index',
+  modalOptions = {}
+) => {
+  if (hasUserToken()) return true
+
+  try {
+    uni.setStorageSync(POST_LOGIN_REDIRECT_KEY, redirectUrl)
+  } catch (e) {}
+
+  const title = (modalOptions && modalOptions.title) ? String(modalOptions.title) : '需要登录'
+  const content = (modalOptions && modalOptions.content)
+    ? String(modalOptions.content)
+    : '该功能需要先登录，是否现在去登录？'
+
+  const confirmed = await new Promise((resolve) => {
+    uni.showModal({
+      title,
+      content,
+      confirmText: '去登录',
+      cancelText: '取消',
+      success: (res) => resolve(!!(res && res.confirm)),
+      fail: () => resolve(false)
+    })
+  })
+
+  if (!confirmed) return false
+
+  const pages = (typeof getCurrentPages === 'function') ? getCurrentPages() : []
+  const current = pages && pages.length ? pages[pages.length - 1] : null
+  const route = current && current.route ? `/${current.route}` : ''
+  if (route === '/pages/auth/auth') return false
+
+  uni.reLaunch({
+    url: '/pages/auth/auth'
+  })
+  return false
+}
+
 export const requireUserLoginOrRedirect = async (redirectUrl = '/pages/index/index') => {
   if (hasUserToken()) return true
 
@@ -100,6 +139,7 @@ export const logoutUser = () => {
 export default {
   hasUserToken,
   requireUserLoginOrRedirect,
+  confirmUserLoginOrRedirect,
   loginWithWeChatProfile,
   logoutUser
 }

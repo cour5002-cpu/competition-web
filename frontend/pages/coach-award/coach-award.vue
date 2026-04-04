@@ -79,9 +79,7 @@ export default {
     }
   },
 
-  async onShow() {
-    await auth.requireUserLoginOrRedirect('/pages/coach-award/coach-award')
-  },
+  async onShow() {},
 
   onHide() {
     this.resetPage()
@@ -113,7 +111,10 @@ export default {
       this.hasSearched = false
     },
     async search() {
-      const ok = await auth.requireUserLoginOrRedirect('/pages/coach-award/coach-award')
+      const ok = await auth.confirmUserLoginOrRedirect('/pages/coach-award/coach-award', {
+        title: '需要登录',
+        content: '查询优秀辅导员证书需要先登录，是否现在去登录？'
+      })
       if (!ok) return
 
       const teacherName = String(this.teacherName || '').trim()
@@ -164,37 +165,40 @@ export default {
     openCoachCertificate() {
       if (!this.canDownload) return
 
-      const coachId = String(this.coachId || '').trim()
-      const url = `${BASE_URL}/api/certificate/generate-excellent-coach/${coachId}`
-      const token = String(uni.getStorageSync('user_token') || '').trim()
-      uni.showLoading({ title: '打开中...' })
+      auth.confirmUserLoginOrRedirect('/pages/coach-award/coach-award', {
+        title: '需要登录',
+        content: '打开优秀辅导员证书需要先登录，是否现在去登录？'
+      }).then((ok) => {
+        if (!ok) return
 
-      uni.downloadFile({
-        url,
-        header: token ? { Authorization: `Bearer ${token}` } : {},
-        success: (res) => {
-          uni.hideLoading()
-          if (res.statusCode === 200) {
-            uni.openDocument({
-              filePath: res.tempFilePath,
-              showMenu: true
+        const coachId = String(this.coachId || '').trim()
+        const url = `${BASE_URL}/api/certificate/generate-excellent-coach/${coachId}`
+        const token = String(uni.getStorageSync('user_token') || '').trim()
+        uni.showLoading({ title: '打开中...' })
+
+        uni.downloadFile({
+          url,
+          header: token ? { Authorization: `Bearer ${token}` } : {},
+          success: (res) => {
+            uni.hideLoading()
+            if (res.statusCode === 200) {
+              uni.openDocument({
+                filePath: res.tempFilePath,
+                showMenu: true
+              })
+              return
+            }
+            uni.showModal({
+              title: '下载失败',
+              content: `HTTP ${res.statusCode}`,
+              showCancel: false
             })
-            return
+          },
+          fail: () => {
+            uni.hideLoading()
+            uni.showToast({ title: '下载失败', icon: 'none' })
           }
-          uni.showModal({
-            title: '打开失败',
-            content: '证书下载失败，请稍后重试',
-            showCancel: false
-          })
-        },
-        fail: () => {
-          uni.hideLoading()
-          uni.showModal({
-            title: '打开失败',
-            content: '证书下载失败，请稍后重试',
-            showCancel: false
-          })
-        }
+        })
       })
     }
   }

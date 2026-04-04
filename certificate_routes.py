@@ -191,6 +191,9 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
                             raise ValueError(err)
                         template_config = _apply_student_award_level_red(template_config)
 
+                        # Ensure player certificate category/education_level boxes are stable even if DB template is edited.
+                        template_config = _enforce_player_category_education_level_boxes(template_config)
+
                         player_pdf = generator.generate_certificate(application, template_config)
                         player_filename = (
                             f"{match_no}_"
@@ -433,6 +436,38 @@ def _apply_student_award_level_red(template_config):
         return template_config
 
 
+def _enforce_player_category_education_level_boxes(template_config):
+    try:
+        template_config = dict(template_config or {})
+
+        coord_unit = str(template_config.get('coord_unit', '') or '').lower()
+        y_origin = str(template_config.get('y_origin', '') or '').lower()
+        if coord_unit != 'px' or y_origin != 'top':
+            return template_config
+
+        texts = template_config.get('texts')
+        if not isinstance(texts, list):
+            return template_config
+
+        for item in texts:
+            if not isinstance(item, dict):
+                continue
+            field = str(item.get('field', '') or '').strip()
+            if field == 'category':
+                item['x'] = 636
+                item['width'] = 188
+                item['y'] = 473
+            elif field == 'education_level':
+                item['x'] = 862
+                item['width'] = 272
+                item['y'] = 473
+
+        template_config['texts'] = texts
+        return template_config
+    except Exception:
+        return template_config
+
+
 def _strip_coach_title_texts(template_config):
     try:
         template_config = dict(template_config or {})
@@ -552,6 +587,9 @@ def generate_certificate(application_id):
             }), 404
 
         template_config = _apply_student_award_level_red(template_config)
+
+        # Ensure player certificate category/education_level boxes are stable even if DB template is edited.
+        template_config = _enforce_player_category_education_level_boxes(template_config)
 
         # Student stamps (final): always inject 6 stamps at the bottom.
         # Do NOT depend on a specific background_image value, because templates may vary.

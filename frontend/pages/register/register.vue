@@ -335,8 +335,16 @@ export default {
   },
   
   async onShow() {
-    await auth.requireUserLoginOrRedirect('/pages/register/register')
+    this.restoreDraft()
     this.tryLoadResubmitFromStorage()
+  },
+
+  onHide() {
+    this.saveDraft()
+  },
+
+  onUnload() {
+    this.saveDraft()
   },
 
   onLoad() {
@@ -344,6 +352,47 @@ export default {
   },
   
   methods: {
+    _draftStorageKey() {
+      return 'register_form_draft'
+    },
+
+    saveDraft() {
+      try {
+        const payload = {
+          categoryIndex: this.categoryIndex,
+          taskIndex: this.taskIndex,
+          educationIndex: this.educationIndex,
+          regionValue: this.regionValue,
+          participantCount: this.participantCount,
+          selectedTask: this.selectedTask,
+          formData: this.formData,
+          consentChecked: this.consentChecked,
+          isResubmit: this.isResubmit,
+          resubmitApplicationId: this.resubmitApplicationId
+        }
+        uni.setStorageSync(this._draftStorageKey(), payload)
+      } catch (e) {}
+    },
+
+    restoreDraft() {
+      try {
+        const draft = uni.getStorageSync(this._draftStorageKey())
+        if (!draft || typeof draft !== 'object') return
+
+        if (typeof draft.categoryIndex !== 'undefined') this.categoryIndex = draft.categoryIndex
+        if (typeof draft.taskIndex !== 'undefined') this.taskIndex = draft.taskIndex
+        if (typeof draft.educationIndex !== 'undefined') this.educationIndex = draft.educationIndex
+        if (typeof draft.participantCount !== 'undefined') this.participantCount = draft.participantCount
+        if (typeof draft.consentChecked !== 'undefined') this.consentChecked = !!draft.consentChecked
+        if (typeof draft.isResubmit !== 'undefined') this.isResubmit = !!draft.isResubmit
+        if (typeof draft.resubmitApplicationId !== 'undefined') this.resubmitApplicationId = String(draft.resubmitApplicationId || '')
+
+        if (Array.isArray(draft.regionValue)) this.regionValue = draft.regionValue
+        if (draft.selectedTask && typeof draft.selectedTask === 'object') this.selectedTask = draft.selectedTask
+        if (draft.formData && typeof draft.formData === 'object') this.formData = draft.formData
+      } catch (e) {}
+    },
+
     isValidPhone(v) {
       const s = String(v || '').trim()
       return /^1[3-9]\d{9}$/.test(s)
@@ -615,6 +664,14 @@ export default {
         uni.showToast({ title: '请先同意协议与隐私政策', icon: 'none' })
         return
       }
+
+      this.saveDraft()
+      const ok = await auth.confirmUserLoginOrRedirect('/pages/register/register', {
+        title: '需要登录',
+        content: '提交报名需要先登录，是否现在去登录？'
+      })
+      if (!ok) return
+
       if (!this.canSubmit) {
         uni.showToast({
           title: '请完善必填信息',
@@ -640,6 +697,9 @@ export default {
         uni.hideLoading()
 
         if (data.success) {
+          try {
+            uni.removeStorageSync(this._draftStorageKey())
+          } catch (e) {}
           uni.showToast({
             title: this.isResubmit ? '已再次提交' : '报名成功',
             icon: 'success'

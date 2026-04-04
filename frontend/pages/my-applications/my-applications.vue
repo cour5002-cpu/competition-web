@@ -123,9 +123,7 @@ export default {
     }
   },
 
-  async onShow() {
-    await auth.requireUserLoginOrRedirect('/pages/my-applications/my-applications')
-  },
+  async onShow() {},
 
   onHide() {
     this.resetPage()
@@ -160,60 +158,71 @@ export default {
     openPlayerCertificate(application) {
       if (!this.canOpenCertificate(application)) return
 
-      const id = application.id
-      const url = `${BASE_URL}/api/certificate/generate/${id}`
-      const token = String(uni.getStorageSync('user_token') || '').trim()
-      uni.showLoading({ title: '打开中...' })
+      auth.confirmUserLoginOrRedirect('/pages/my-applications/my-applications', {
+        title: '需要登录',
+        content: '查看获奖证书需要先登录，是否现在去登录？'
+      }).then((ok) => {
+        if (!ok) return
 
-      uni.downloadFile({
-        url,
-        header: token ? { Authorization: `Bearer ${token}` } : {},
-        success: (res) => {
-          uni.hideLoading()
-          if (!res || res.statusCode !== 200) {
-            const sc = res && typeof res.statusCode !== 'undefined' ? String(res.statusCode) : ''
-            uni.showModal({
-              title: '下载失败',
-              content: sc ? `HTTP ${sc}` : '下载失败',
-              showCancel: false
-            })
-            return
-          }
-          const tempFilePath = res && res.tempFilePath
-          if (!tempFilePath) {
-            uni.showModal({
-              title: '下载失败',
-              content: '未获取到临时文件路径',
-              showCancel: false
-            })
-            return
-          }
-          uni.openDocument({
-            filePath: tempFilePath,
-            showMenu: true,
-            fail: (e) => {
-              const msg = (e && e.errMsg) ? String(e.errMsg) : '打开失败'
+        const id = application.id
+        const url = `${BASE_URL}/api/certificate/generate/${id}`
+        const token = String(uni.getStorageSync('user_token') || '').trim()
+        uni.showLoading({ title: '打开中...' })
+
+        uni.downloadFile({
+          url,
+          header: token ? { Authorization: `Bearer ${token}` } : {},
+          success: (res) => {
+            uni.hideLoading()
+            if (!res || res.statusCode !== 200) {
+              const sc = res && typeof res.statusCode !== 'undefined' ? String(res.statusCode) : ''
               uni.showModal({
-                title: '打开失败',
-                content: msg,
+                title: '下载失败',
+                content: sc ? `HTTP ${sc}` : '下载失败',
                 showCancel: false
               })
+              return
             }
-          })
-        },
-        fail: (e) => {
-          uni.hideLoading()
-          const msg = (e && e.errMsg) ? String(e.errMsg) : '下载失败'
-          uni.showModal({
-            title: '下载失败',
-            content: msg,
-            showCancel: false
-          })
-        }
+            const tempFilePath = res && res.tempFilePath
+            if (!tempFilePath) {
+              uni.showModal({
+                title: '下载失败',
+                content: '未获取到临时文件路径',
+                showCancel: false
+              })
+              return
+            }
+            uni.openDocument({
+              filePath: tempFilePath,
+              showMenu: true,
+              fail: (e) => {
+                const msg = (e && e.errMsg) ? String(e.errMsg) : '打开失败'
+                uni.showModal({
+                  title: '打开失败',
+                  content: msg,
+                  showCancel: false
+                })
+              }
+            })
+          },
+          fail: (e) => {
+            uni.hideLoading()
+            const msg = (e && e.errMsg) ? String(e.errMsg) : '下载失败'
+            uni.showModal({
+              title: '下载失败',
+              content: msg,
+              showCancel: false
+            })
+          }
+        })
       })
+      return
     },
     async searchApplications() {
-      const ok = await auth.requireUserLoginOrRedirect('/pages/my-applications/my-applications')
+      const ok = await auth.confirmUserLoginOrRedirect('/pages/my-applications/my-applications', {
+        title: '需要登录',
+        content: '查询获奖信息需要先登录，是否现在去登录？'
+      })
       if (!ok) return
 
       if (!this.matchNo || !String(this.matchNo).trim()) {
