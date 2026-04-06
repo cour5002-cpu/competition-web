@@ -30,16 +30,22 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'mysql+pymysql://root:password@localhost/competition_db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,
-    'pool_recycle': int(os.environ.get('DB_POOL_RECYCLE', '280') or 280),
-    'pool_timeout': int(os.environ.get('DB_POOL_TIMEOUT', '30') or 30),
-    'pool_size': int(os.environ.get('DB_POOL_SIZE', '5') or 5),
-    'max_overflow': int(os.environ.get('DB_MAX_OVERFLOW', '10') or 10),
-    'connect_args': {
-        'connect_timeout': int(os.environ.get('DB_CONNECT_TIMEOUT', '10') or 10)
+db_uri = str(app.config['SQLALCHEMY_DATABASE_URI'] or '').strip().lower()
+if db_uri.startswith('sqlite:'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True
     }
-}
+else:
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': int(os.environ.get('DB_POOL_RECYCLE', '280') or 280),
+        'pool_timeout': int(os.environ.get('DB_POOL_TIMEOUT', '30') or 30),
+        'pool_size': int(os.environ.get('DB_POOL_SIZE', '5') or 5),
+        'max_overflow': int(os.environ.get('DB_MAX_OVERFLOW', '10') or 10),
+        'connect_args': {
+            'connect_timeout': int(os.environ.get('DB_CONNECT_TIMEOUT', '10') or 10)
+        }
+    }
 
 # Initialize extensions
 db = SQLAlchemy(app)

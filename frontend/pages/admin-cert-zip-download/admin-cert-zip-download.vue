@@ -26,7 +26,7 @@
       <view v-if="task" class="task">
         <text class="task-title">任务状态</text>
         <text class="task-line">状态：{{ task.status || '-' }}</text>
-        <text class="task-line">进度：{{ (task.progress && task.progress.done_applications) || 0 }}/{{ (task.progress && task.progress.total_applications) || 0 }}</text>
+        <text class="task-line">进度：{{ progressDone }}/{{ progressTotal }}</text>
         <text class="task-line">生成文件数：{{ (task.progress && task.progress.generated_files) || 0 }}</text>
         <text class="task-line">错误：{{ (task.progress && task.progress.errors) || 0 }}</text>
       </view>
@@ -57,8 +57,8 @@ export default {
     return {
       taskId: '',
       kindIndex: 0,
-      kindLabels: ['全部', '选手证书', '辅导员证书', '优秀辅导员证书'],
-      kindValues: ['', 'player', 'coach', 'excellent_coach'],
+      kindLabels: ['学生证书', '优秀辅导员证书'],
+      kindValues: ['player', 'excellent_coach'],
       loading: false,
       task: null,
       lastZip: null
@@ -68,6 +68,9 @@ export default {
   onLoad(options) {
     const tid = options && options.task_id ? String(options.task_id) : ''
     this.taskId = tid.trim()
+    const kind = options && options.kind ? String(options.kind).trim() : ''
+    const idx = this.kindValues.indexOf(kind)
+    if (idx >= 0) this.kindIndex = idx
   },
 
   async onShow() {
@@ -75,6 +78,18 @@ export default {
     if (!token) {
       uni.reLaunch({ url: '/pages/auth/auth?mode=admin' })
       return
+    }
+  },
+
+  computed: {
+    progressDone() {
+      const p = (this.task && this.task.progress) ? this.task.progress : {}
+      return Number(p.done_applications || p.done_coaches || 0)
+    },
+
+    progressTotal() {
+      const p = (this.task && this.task.progress) ? this.task.progress : {}
+      return Number(p.total_applications || p.total_coaches || 0)
     }
   },
 
@@ -96,7 +111,11 @@ export default {
       this.loading = true
       try {
         uni.showLoading({ title: '查询中...' })
-        const res = await request.get(`/api/admin/certificate-tasks/${encodeURIComponent(tid)}`)
+        const kind = String((this.kindValues && this.kindValues[this.kindIndex]) || 'player')
+        const api = kind === 'excellent_coach'
+          ? `/api/admin/excellent-coach-certificate-tasks/${encodeURIComponent(tid)}`
+          : `/api/admin/certificate-tasks/${encodeURIComponent(tid)}`
+        const res = await request.get(api)
         uni.hideLoading()
         if (res && res.success && res.data) {
           this.task = res.data
@@ -122,14 +141,16 @@ export default {
         return
       }
 
-      const kind = String((this.kindValues && this.kindValues[this.kindIndex]) || '')
+      const kind = String((this.kindValues && this.kindValues[this.kindIndex]) || 'player')
       const tid = String(this.taskId || '').trim()
 
       const qs = []
-      if (kind) qs.push(`kind=${encodeURIComponent(kind)}`)
       if (tid) qs.push(`task_id=${encodeURIComponent(tid)}`)
 
-      const url = `${BASE_URL}/api/admin/certificates/download-zip${qs.length ? ('?' + qs.join('&')) : ''}`
+      const api = kind === 'excellent_coach'
+        ? '/api/admin/excellent-coach-certificates/download-zip'
+        : '/api/admin/certificates/download-player-zip'
+      const url = `${BASE_URL}${api}${qs.length ? ('?' + qs.join('&')) : ''}`
 
       this.loading = true
       uni.showLoading({ title: '下载中...' })

@@ -22,6 +22,7 @@ certificate_bp = Blueprint('certificate', __name__)
 _CERT_BASE_DIR = str(os.environ.get('CERT_STORAGE_DIR', '') or '').strip() or os.path.join('/tmp', 'competition-web-certs')
 _CERT_CACHE_DIR = os.path.join(_CERT_BASE_DIR, 'generated_certs')
 _CERT_TASK_DIR = os.path.join(_CERT_BASE_DIR, 'generated_cert_tasks')
+_EXCELLENT_COACH_TASK_DIR = os.path.join(_CERT_BASE_DIR, 'generated_excellent_coach_tasks')
 
 _logger = logging.getLogger(__name__)
 
@@ -33,8 +34,16 @@ def _ensure_dir(p: str):
         pass
 
 
+def _task_path_for(base_dir: str, task_id: str) -> str:
+    return os.path.join(base_dir, f"{task_id}.json")
+
+
 def _task_path(task_id: str) -> str:
-    return os.path.join(_CERT_TASK_DIR, f"{task_id}.json")
+    return _task_path_for(_CERT_TASK_DIR, task_id)
+
+
+def _excellent_coach_task_path(task_id: str) -> str:
+    return _task_path_for(_EXCELLENT_COACH_TASK_DIR, task_id)
 
 
 def _write_json(path: str, payload: dict):
@@ -168,8 +177,7 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
 
         try:
             from app import app as flask_app
-            from models import Application, CertificateTemplate
-            from certificate_generator import CertificateGenerator
+            from models import Application
 
             _ensure_dir(_CERT_CACHE_DIR)
             _ensure_dir(_CERT_TASK_DIR)
@@ -198,8 +206,6 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
                     else:
                         raise
 
-                generator = CertificateGenerator()
-
                 total = len(applications)
                 try:
                     meta['progress']['total_applications'] = int(total)
@@ -209,64 +215,10 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
 
                 for idx, application in enumerate(applications):
                     try:
-                        match_no = _safe_filename_part(application.match_no)
-                        participants = sorted(application.participants, key=lambda p: p.seq_no)
-                        name_part = "、".join([p.participant_name for p in participants]) if participants else ''
-
-                        _normalize_application_for_cert(application)
-
-                        template_config, err = _pick_template_config(
-                            CertificateTemplate,
-                            generator,
-                            category=application.category,
-                            award_level=application.award_level,
-                            fallback_award_level='一等奖'
-                        )
-                        if err:
-                            raise ValueError(err)
-                        template_config = _apply_student_award_level_red(template_config)
-
-                        # Ensure player certificate category/education_level boxes are stable even if DB template is edited.
-                        template_config = _enforce_player_category_education_level_boxes(template_config)
-
-                        player_pdf = generator.generate_certificate(application, template_config)
-                        player_filename = (
-                            f"{match_no}_"
-                            f"{_safe_filename_part(name_part)}_"
-                            f"{_safe_filename_part(application.category)}_"
-                            f"{_safe_filename_part(application.education_level)}_"
-                            f"{_safe_filename_part(application.award_level)}.pdf"
-                        )
+                        player_pdf = _render_player_certificate_bytes(application)
+                        player_filename = _player_download_name(application)
                         player_path = _cache_pdf_path('player', str(application.id))
                         if _write_pdf_atomic(player_path, player_pdf):
-                            meta['progress']['generated_files'] = int(meta['progress'].get('generated_files', 0) or 0) + 1
-
-                        coach_award_level = f"{application.award_level}-辅导员"
-                        coach_config, coach_err = _pick_template_config(
-                            CertificateTemplate,
-                            generator,
-                            category=application.category,
-                            award_level=coach_award_level,
-                            fallback_award_level='一等奖-辅导员'
-                        )
-                        if coach_err:
-                            raise ValueError(coach_err)
-                        try:
-                            if isinstance(coach_config, dict):
-                                coach_config['bg_width'] = 1240
-                        except Exception:
-                            pass
-                        coach_config = _ensure_coach_title_red(coach_config)
-                        coach_pdf = generator.generate_certificate(application, coach_config)
-                        teacher_name = getattr(application, 'teacher_name', '') or ''
-                        coach_filename = (
-                            f"{match_no}_"
-                            f"{_safe_filename_part(teacher_name)}_"
-                            f"{_safe_filename_part(application.category)}_"
-                            f"{_safe_filename_part(coach_award_level)}.pdf"
-                        )
-                        coach_path = _cache_pdf_path('coach', str(application.id))
-                        if _write_pdf_atomic(coach_path, coach_pdf):
                             meta['progress']['generated_files'] = int(meta['progress'].get('generated_files', 0) or 0) + 1
 
                         manifest_path = os.path.join(_CERT_CACHE_DIR, 'manifests')
@@ -275,8 +227,8 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
                             os.path.join(manifest_path, f"{application.id}.json"),
                             {
                                 'application_id': application.id,
+                                'match_no': application.match_no,
                                 'player_filename': player_filename,
-                                'coach_filename': coach_filename,
                                 'updated_at': datetime.now().isoformat()
                             }
                         )
@@ -315,6 +267,106 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
             _write_json(meta_path, meta)
             try:
                 _logger.exception('certificate task %s failed', task_id)
+            except Exception:
+                pass
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return task_id
+
+
+def _start_background_excellent_coach_task(*, coach_ids, source: str = ''):
+    task_id = uuid.uuid4().hex
+    now = datetime.now().isoformat()
+    payload = {
+        'task_id': task_id,
+        'source': str(source or ''),
+        'status': 'queued',
+        'created_at': now,
+        'started_at': None,
+        'finished_at': None,
+        'progress': {
+            'total_coaches': int(len(coach_ids or [])),
+            'done_coaches': 0,
+            'generated_files': 0,
+            'errors': 0
+        },
+        'coach_ids': [int(x) for x in (coach_ids or []) if str(x).strip().isdigit()],
+        'error_details': []
+    }
+    _write_json(_excellent_coach_task_path(task_id), payload)
+
+    def _run():
+        meta_path = _excellent_coach_task_path(task_id)
+        meta = _read_json(meta_path) or payload
+        meta['status'] = 'running'
+        meta['started_at'] = datetime.now().isoformat()
+        _write_json(meta_path, meta)
+
+        try:
+            from app import app as flask_app
+            from models import ExcellentCoach
+
+            _ensure_dir(_CERT_CACHE_DIR)
+            _ensure_dir(_EXCELLENT_COACH_TASK_DIR)
+
+            with flask_app.app_context():
+                ids = meta.get('coach_ids') or []
+                coaches = ExcellentCoach.query.filter(ExcellentCoach.id.in_(ids)).all()
+
+                try:
+                    meta['progress']['total_coaches'] = int(len(coaches))
+                except Exception:
+                    pass
+                _write_json(meta_path, meta)
+
+                for idx, coach in enumerate(coaches):
+                    try:
+                        application = _find_application_for_coach(
+                            teacher_name=coach.teacher_name,
+                            teacher_phone_hash=coach.teacher_phone_hash
+                        )
+                        if not application:
+                            raise ValueError('未找到已获奖的对应报名记录')
+
+                        pdf_content = _render_excellent_coach_certificate_bytes(coach, application)
+                        cached_path = _cache_pdf_path('excellent_coach', str(coach.id))
+                        if _write_pdf_atomic(cached_path, pdf_content):
+                            meta['progress']['generated_files'] = int(meta['progress'].get('generated_files', 0) or 0) + 1
+                    except Exception as e:
+                        meta['progress']['errors'] = int(meta['progress'].get('errors', 0) or 0) + 1
+                        try:
+                            meta['error_details'].append({'coach_id': getattr(coach, 'id', None), 'error': str(e)})
+                            if len(meta['error_details']) > 50:
+                                meta['error_details'] = meta['error_details'][-50:]
+                        except Exception:
+                            pass
+                        try:
+                            _logger.exception('excellent coach certificate task %s coach %s failed', task_id, getattr(coach, 'id', None))
+                        except Exception:
+                            pass
+
+                    try:
+                        meta['progress']['done_coaches'] = int(idx + 1)
+                    except Exception:
+                        pass
+                    _write_json(meta_path, meta)
+
+                meta['status'] = 'finished'
+                meta['finished_at'] = datetime.now().isoformat()
+                _write_json(meta_path, meta)
+
+        except Exception as e:
+            meta['status'] = 'failed'
+            meta['finished_at'] = datetime.now().isoformat()
+            meta['error_details'] = meta.get('error_details') or []
+            try:
+                meta['error_details'].append({'error': str(e)})
+            except Exception:
+                pass
+            _write_json(meta_path, meta)
+            try:
+                _logger.exception('excellent coach certificate task %s failed', task_id)
             except Exception:
                 pass
 
@@ -416,15 +468,17 @@ def _assert_user_owns_application(application):
     return bool(application and application.openid and application.openid == openid)
 
 
-def _find_awarded_application_for_coach(*, teacher_name: str, teacher_phone_hash: str):
+def _find_application_for_coach(*, teacher_name: str, teacher_phone_hash: str):
     from models import Application
     if not teacher_name or not teacher_phone_hash:
         return None
     return Application.query.filter(
         Application.teacher_name == teacher_name,
-        Application.teacher_phone_hash == teacher_phone_hash,
-        Application.award_level.isnot(None)
-    ).order_by(Application.created_at.desc()).first()
+        Application.teacher_phone_hash == teacher_phone_hash
+    ).order_by(
+        Application.match_no.is_(None),
+        Application.created_at.desc()
+    ).first()
 
 
 def _strip_category_sai_suffix(application):
@@ -566,13 +620,217 @@ def _ensure_coach_title_red(template_config):
     except Exception:
         return template_config
 
+
+def _player_download_name(application) -> str:
+    participants = sorted(application.participants, key=lambda p: p.seq_no)
+    name_part = "、".join([p.participant_name for p in participants]) if participants else ''
+    return (
+        f"{_safe_filename_part(application.match_no)}_"
+        f"{_safe_filename_part(name_part)}_"
+        f"{_safe_filename_part(application.category)}_"
+        f"{_safe_filename_part(application.education_level)}_"
+        f"{_safe_filename_part(application.award_level)}.pdf"
+    )
+
+
+def _excellent_coach_download_name(coach, application) -> str:
+    return (
+        f"{_safe_filename_part(application.match_no)}_"
+        f"{_safe_filename_part(coach.teacher_name)}_"
+        f"{_safe_filename_part(application.category)}_"
+        f"优秀辅导员.pdf"
+    )
+
+
+def _zip_entry_name_by_match_no(match_no: str) -> str:
+    return f"{_safe_filename_part(match_no)}.pdf"
+
+
+def _build_player_template_config(application, CertificateTemplate, generator):
+    _normalize_application_for_cert(application)
+
+    template_config, err = _pick_template_config(
+        CertificateTemplate,
+        generator,
+        category=application.category,
+        award_level=application.award_level,
+        fallback_award_level='一等奖'
+    )
+    if err:
+        raise ValueError(err)
+
+    template_config = _apply_student_award_level_red(template_config)
+    template_config = _enforce_player_category_education_level_boxes(template_config)
+
+    try:
+        bg_rel = str((template_config or {}).get('background_image', '') or '').strip()
+        bg_abs = ''
+        if bg_rel and (not os.path.isabs(bg_rel)):
+            bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), bg_rel)
+        elif bg_rel:
+            bg_abs = bg_rel
+
+        if bg_abs and os.path.exists(bg_abs):
+            try:
+                Image.open(bg_abs).size
+            except Exception:
+                pass
+
+        stamp_count = 6
+        x_left = 37
+        x_right = 1224
+        y_top = 663
+        y_bottom = 851
+        y_center = int((int(y_top) + int(y_bottom)) / 2)
+
+        span_w = max(1, int(x_right) - int(x_left))
+        stamp_gap = 30
+        stamp_w = int((span_w - stamp_gap * (stamp_count - 1)) / stamp_count)
+        stamp_w = max(50, min(180, stamp_w))
+
+        total_w = stamp_w * stamp_count + stamp_gap * (stamp_count - 1)
+        start_x = int(x_left) + int((span_w - total_w) / 2)
+
+        stamps = []
+        for i in range(stamp_count):
+            stamps.append({
+                'image': f"assets/cert/stamps/player/{i + 1}.png",
+                'fallback_images': [
+                    'assets/cert/测试盖章.png',
+                    'assets/cert/test.png',
+                ],
+                'x': int(start_x + i * (stamp_w + stamp_gap)),
+                'y': int(y_center),
+                'width': int(stamp_w),
+                'height': int(stamp_w),
+                'unit': 'px',
+                'y_origin': 'top',
+                'y_anchor': 'center',
+                'keep_aspect': True,
+            })
+
+        template_config = dict(template_config or {})
+        template_config.update({'stamp_images': stamps})
+    except Exception:
+        pass
+
+    return template_config
+
+
+def _build_excellent_coach_template_config(coach, application, CertificateTemplate, generator):
+    coach_award_level = f"{application.award_level}-辅导员"
+
+    template_config, err = _pick_template_config(
+        CertificateTemplate,
+        generator,
+        category=application.category,
+        award_level=coach_award_level,
+        fallback_award_level='一等奖-辅导员'
+    )
+    if err:
+        raise ValueError(err)
+
+    try:
+        template_config = dict(template_config or {})
+    except Exception:
+        pass
+
+    try:
+        cat = str(getattr(application, 'category', '') or '')
+        if cat.endswith('赛'):
+            setattr(application, 'category', cat[:-1])
+    except Exception:
+        pass
+
+    try:
+        setattr(application, 'teacher_name', coach.teacher_name)
+    except Exception:
+        pass
+
+    try:
+        if isinstance(template_config, dict):
+            bg_w = 1240
+            try:
+                bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'coach.png')
+                bg_w, _bg_h = Image.open(bg_abs).size
+            except Exception:
+                bg_w = 1240
+
+            stamp_count = 6
+            stamp_margin = 80
+            stamp_gap = 20
+            stamp_w = max(50, int((int(bg_w) - 2 * stamp_margin - stamp_gap * (stamp_count - 1)) / stamp_count))
+
+            template_config['background_image'] = 'assets/cert/coach.png'
+            template_config['coord_unit'] = 'px'
+            template_config['y_origin'] = 'top'
+            template_config['use_background_size'] = True
+            template_config['global_y_offset'] = 0
+            template_config['texts'] = [
+                {
+                    'field': 'teacher_name',
+                    'font': '宋体',
+                    'font_size': 34,
+                    'align': 'center',
+                    'width': 150,
+                    'x': 320,
+                    'x_anchor': 'left',
+                    'y': 1080,
+                },
+                {
+                    'field': 'category',
+                    'font': '宋体',
+                    'font_size': 52,
+                    'align': 'right',
+                    'width': 500,
+                    'x': 780,
+                    'x_anchor': 'right',
+                    'y': 1280,
+                },
+            ]
+            template_config['stamp_images'] = _build_centered_stamp_images(
+                cert_kind='coach',
+                count=stamp_count,
+                width=stamp_w,
+                height=stamp_w,
+                gap=stamp_gap,
+                y=170,
+                unit='px',
+                y_origin='bottom',
+                y_anchor='center',
+                keep_aspect=True,
+                dx=70,
+            )
+            template_config['bg_width'] = int(bg_w)
+    except Exception:
+        pass
+
+    return _ensure_coach_title_red(template_config)
+
+
+def _render_player_certificate_bytes(application):
+    from models import CertificateTemplate
+    from certificate_generator import CertificateGenerator
+
+    generator = CertificateGenerator()
+    template_config = _build_player_template_config(application, CertificateTemplate, generator)
+    return generator.generate_certificate(application, template_config)
+
+
+def _render_excellent_coach_certificate_bytes(coach, application):
+    from models import CertificateTemplate
+    from certificate_generator import CertificateGenerator
+
+    generator = CertificateGenerator()
+    template_config = _build_excellent_coach_template_config(coach, application, CertificateTemplate, generator)
+    return generator.generate_certificate(application, template_config)
+
 @certificate_bp.route('/api/certificate/generate/<int:application_id>', methods=['GET'])
 @require_user()
 def generate_certificate(application_id):
     """生成证书PDF"""
     try:
-        from models import Application, CertificateTemplate
-        from certificate_generator import CertificateGenerator
+        from models import Application
         
         # 获取申请记录
         application = Application.query.get(application_id)
@@ -588,15 +846,7 @@ def generate_certificate(application_id):
                 'message': '该记录暂无获奖信息，无法生成证书'
             }), 400
         
-        participants = sorted(application.participants, key=lambda p: p.seq_no)
-        name_part = "、".join([p.participant_name for p in participants]) if participants else ''
-        filename = (
-            f"{_safe_filename_part(application.match_no)}_"
-            f"{_safe_filename_part(name_part)}_"
-            f"{_safe_filename_part(application.category)}_"
-            f"{_safe_filename_part(application.education_level)}_"
-            f"{_safe_filename_part(application.award_level)}.pdf"
-        )
+        filename = _player_download_name(application)
 
         cached_path = _cache_pdf_path('player', str(application.id))
         if not _is_cached_pdf_stale(cached_pdf_path=cached_path, kind='player'):
@@ -604,91 +854,7 @@ def generate_certificate(application_id):
             if cached_resp is not None:
                 return cached_resp
 
-        generator = CertificateGenerator()
-
-        _normalize_application_for_cert(application)
-
-        # 选手证书：甲方未提供二/三等奖模板前，统一使用“一等奖”模板
-        template_config, err = _pick_template_config(
-            CertificateTemplate,
-            generator,
-            category=application.category,
-            award_level=application.award_level,
-            fallback_award_level='一等奖'
-        )
-        if err:
-            return jsonify({
-                'success': False,
-                'message': err
-            }), 404
-
-        template_config = _apply_student_award_level_red(template_config)
-
-        # Ensure player certificate category/education_level boxes are stable even if DB template is edited.
-        template_config = _enforce_player_category_education_level_boxes(template_config)
-
-        # Student stamps (final): always inject 6 stamps at the bottom.
-        # Do NOT depend on a specific background_image value, because templates may vary.
-        # IMPORTANT: Do NOT override the template coordinate system (coord_unit/y_origin).
-        # Otherwise mm-based templates will render texts off-page and appear as "no text".
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            bg_rel = str((template_config or {}).get('background_image', '') or '').strip()
-            bg_abs = ''
-            if bg_rel and (not os.path.isabs(bg_rel)):
-                bg_abs = os.path.join(base_dir, bg_rel)
-            elif bg_rel:
-                bg_abs = bg_rel
-
-            bg_w = None
-            if bg_abs and os.path.exists(bg_abs):
-                try:
-                    bg_w, _bg_h = Image.open(bg_abs).size
-                except Exception:
-                    bg_w = None
-
-            stamp_count = 6
-
-            # Student certificate coordinates are px with top-origin.
-            # Reserve stamps horizontally centered within x=37..1224 and vertically within y=663..851.
-            x_left = 37
-            x_right = 1224
-            y_top = 663
-            y_bottom = 851
-            y_center = int((int(y_top) + int(y_bottom)) / 2)
-
-            span_w = max(1, int(x_right) - int(x_left))
-            stamp_gap = 30
-            stamp_w = int((span_w - stamp_gap * (stamp_count - 1)) / stamp_count)
-            stamp_w = max(50, min(180, stamp_w))
-
-            total_w = stamp_w * stamp_count + stamp_gap * (stamp_count - 1)
-            start_x = int(x_left) + int((span_w - total_w) / 2)
-
-            stamps = []
-            for i in range(stamp_count):
-                stamps.append({
-                    'image': f"assets/cert/stamps/player/{i + 1}.png",
-                    'fallback_images': [
-                        'assets/cert/测试盖章.png',
-                        'assets/cert/test.png',
-                    ],
-                    'x': int(start_x + i * (stamp_w + stamp_gap)),
-                    'y': int(y_center),
-                    'width': int(stamp_w),
-                    'height': int(stamp_w),
-                    'unit': 'px',
-                    'y_origin': 'top',
-                    'y_anchor': 'center',
-                    'keep_aspect': True,
-                })
-
-            template_config = dict(template_config or {})
-            template_config.update({'stamp_images': stamps})
-        except Exception:
-            pass
-        
-        pdf_content = generator.generate_certificate(application, template_config)
+        pdf_content = _render_player_certificate_bytes(application)
         _write_pdf_atomic(cached_path, pdf_content)
         
         return send_file(
@@ -710,31 +876,20 @@ def generate_certificate(application_id):
 def generate_excellent_coach_certificate(coach_id):
     """生成优秀辅导员证书PDF（学生端查询后下载）"""
     try:
-        from models import ExcellentCoach, CertificateTemplate
-        from certificate_generator import CertificateGenerator
+        from models import ExcellentCoach
 
         coach = ExcellentCoach.query.get(coach_id)
         if not coach:
             return jsonify({'success': False, 'message': '未找到优秀辅导员记录'}), 404
 
-        application = _find_awarded_application_for_coach(
+        application = _find_application_for_coach(
             teacher_name=coach.teacher_name,
             teacher_phone_hash=coach.teacher_phone_hash
         )
         if not application:
-            return jsonify({'success': False, 'message': '暂无获奖数据，无法生成证书'}), 404
+            return jsonify({'success': False, 'message': '未找到对应报名记录，无法生成证书'}), 404
 
-        try:
-            setattr(application, 'teacher_name', coach.teacher_name)
-        except Exception:
-            pass
-
-        filename = (
-            f"{_safe_filename_part(application.match_no)}_"
-            f"{_safe_filename_part(coach.teacher_name)}_"
-            f"{_safe_filename_part(application.category)}_"
-            f"优秀辅导员.pdf"
-        )
+        filename = _excellent_coach_download_name(coach, application)
 
         cached_path = _cache_pdf_path('excellent_coach', str(coach.id))
         if not _is_cached_pdf_stale(cached_pdf_path=cached_path, kind='excellent_coach'):
@@ -742,106 +897,7 @@ def generate_excellent_coach_certificate(coach_id):
             if cached_resp is not None:
                 return cached_resp
 
-        generator = CertificateGenerator()
-
-        coach_award_level = f"{application.award_level}-辅导员"
-
-        template_config, err = _pick_template_config(
-            CertificateTemplate,
-            generator,
-            category=application.category,
-            award_level=coach_award_level,
-            fallback_award_level='一等奖-辅导员'
-        )
-        if err:
-            return jsonify({'success': False, 'message': err}), 404
-
-        try:
-            template_config = dict(template_config or {})
-        except Exception:
-            template_config = template_config
-
-        try:
-            cat = str(getattr(application, 'category', '') or '')
-            if cat.endswith('赛'):
-                setattr(application, 'category', cat[:-1])
-        except Exception:
-            pass
-
-        try:
-            if isinstance(template_config, dict):
-                bg_w = 1240
-                try:
-                    bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'coach.png')
-                    bg_w, _bg_h = Image.open(bg_abs).size
-                except Exception:
-                    bg_w = 1240
-
-                stamp_count = 6
-                stamp_margin = 80
-                stamp_gap = 20
-                stamp_w = max(50, int((int(bg_w) - 2 * stamp_margin - stamp_gap * (stamp_count - 1)) / stamp_count))
-
-                template_config['background_image'] = 'assets/cert/coach.png'
-                template_config['coord_unit'] = 'px'
-                template_config['y_origin'] = 'top'
-                template_config['use_background_size'] = True
-                template_config['global_y_offset'] = 0
-
-                # Final coach texts layout (must match coach_final_with_test_stamp_*.pdf)
-                template_config['texts'] = [
-                    {
-                        'field': 'teacher_name',
-                        'font': '宋体',
-                        'font_size': 34,
-                        'align': 'center',
-                        'width': 150,
-                        'x': 320,
-                        'x_anchor': 'left',
-                        'y': 1080,
-                    },
-                    {
-                        'field': 'category',
-                        'font': '宋体',
-                        'font_size': 52,
-                        'align': 'right',
-                        'width': 500,
-                        'x': 780,
-                        'x_anchor': 'right',
-                        'y': 1280,
-                    },
-                ]
-
-                template_config['stamp_images'] = _build_centered_stamp_images(
-                    cert_kind='coach',
-                    count=stamp_count,
-                    width=stamp_w,
-                    height=stamp_w,
-                    gap=stamp_gap,
-                    y=170,
-                    unit='px',
-                    y_origin='bottom',
-                    y_anchor='center',
-                    keep_aspect=True,
-                    dx=70,
-                )
-        except Exception:
-            pass
-
-        try:
-            if isinstance(template_config, dict):
-                try:
-                    bg_abs = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'cert', 'coach.png')
-                    bg_w, _bg_h = Image.open(bg_abs).size
-                    template_config['bg_width'] = int(bg_w)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        template_config = _ensure_coach_title_red(template_config)
-
-        pdf_content = generator.generate_certificate(application, template_config)
+        pdf_content = _render_excellent_coach_certificate_bytes(coach, application)
         _write_pdf_atomic(cached_path, pdf_content)
 
         return send_file(
@@ -1003,6 +1059,114 @@ def generate_coach_certificate(application_id):
             'message': f'生成辅导员证书失败: {str(e)}'
         }), 500
 
+
+def _player_zip_entries(task_id: str = ''):
+    from models import Application
+
+    selected_ids = None
+    if task_id:
+        meta = _read_json(_task_path(task_id))
+        if meta and isinstance(meta.get('application_ids'), list):
+            selected_ids = [int(x) for x in meta.get('application_ids') if str(x).strip().isdigit()]
+
+    q = Application.query.filter(Application.award_level.isnot(None))
+    if selected_ids is not None:
+        if not selected_ids:
+            return []
+        q = q.filter(Application.id.in_(selected_ids))
+
+    applications = q.all()
+    entries = []
+    for application in applications:
+        fp = _cache_pdf_path('player', str(application.id))
+        if not os.path.isfile(fp):
+            continue
+        entries.append({
+            'file_path': fp,
+            'zip_name': _zip_entry_name_by_match_no(application.match_no or application.id)
+        })
+    return entries
+
+
+def _excellent_coach_zip_entries(task_id: str = ''):
+    from models import ExcellentCoach
+
+    selected_ids = None
+    if task_id:
+        meta = _read_json(_excellent_coach_task_path(task_id))
+        if meta and isinstance(meta.get('coach_ids'), list):
+            selected_ids = [int(x) for x in meta.get('coach_ids') if str(x).strip().isdigit()]
+
+    q = ExcellentCoach.query
+    if selected_ids is not None:
+        if not selected_ids:
+            return []
+        q = q.filter(ExcellentCoach.id.in_(selected_ids))
+
+    coaches = q.all()
+    entries = []
+    for coach in coaches:
+        fp = _cache_pdf_path('excellent_coach', str(coach.id))
+        if not os.path.isfile(fp):
+            continue
+        application = _find_application_for_coach(
+            teacher_name=coach.teacher_name,
+            teacher_phone_hash=coach.teacher_phone_hash
+        )
+        if not application:
+            continue
+        entries.append({
+            'file_path': fp,
+            'zip_name': _zip_entry_name_by_match_no(application.match_no or coach.id)
+        })
+    return entries
+
+
+def _send_zip_from_entries(*, entries, manifest_payload, filename_prefix: str):
+    zip_buffer = io.BytesIO()
+    found = 0
+
+    with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+        used_names = set()
+        for entry in entries:
+            fp = str((entry or {}).get('file_path', '') or '').strip()
+            zip_name = str((entry or {}).get('zip_name', '') or '').strip()
+            if (not fp) or (not zip_name) or (not os.path.isfile(fp)):
+                continue
+
+            final_name = zip_name
+            if final_name in used_names:
+                base, ext = os.path.splitext(zip_name)
+                idx = 2
+                while f"{base}_{idx}{ext}" in used_names:
+                    idx += 1
+                final_name = f"{base}_{idx}{ext}"
+
+            try:
+                zf.write(fp, final_name)
+                used_names.add(final_name)
+                found += 1
+            except Exception:
+                continue
+
+        zf.writestr('manifest.json', json.dumps({
+            **(manifest_payload or {}),
+            'found': found,
+            'generated_at': datetime.now().isoformat()
+        }, ensure_ascii=False, indent=2))
+
+    if found <= 0:
+        return jsonify({'success': False, 'message': '当前没有可下载的已生成证书'}), 404
+
+    zip_buffer.seek(0)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f"{filename_prefix}_{ts}.zip"
+    )
+
 @certificate_bp.route('/api/certificate/batch-generate', methods=['POST'])
 @require_admin()
 def batch_generate_certificates():
@@ -1045,68 +1209,49 @@ def get_certificate_task(task_id):
         return jsonify({'success': False, 'message': f'查询失败: {str(e)}'}), 500
 
 
-@certificate_bp.route('/api/admin/certificates/download-zip', methods=['GET'])
+@certificate_bp.route('/api/admin/excellent-coach-certificate-tasks/<string:task_id>', methods=['GET'])
 @require_admin()
-def download_cached_certificates_zip():
+def get_excellent_coach_certificate_task(task_id):
     try:
-        kind = str(request.args.get('kind', '') or '').strip().lower()
+        meta = _read_json(_excellent_coach_task_path(task_id))
+        if not meta:
+            return jsonify({'success': False, 'message': '任务不存在'}), 404
+        return jsonify({'success': True, 'data': meta})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'查询失败: {str(e)}'}), 500
+
+
+@certificate_bp.route('/api/admin/certificates/download-player-zip', methods=['GET'])
+@require_admin()
+def download_player_certificates_zip():
+    try:
         task_id = str(request.args.get('task_id', '') or '').strip()
+        entries = _player_zip_entries(task_id)
+        return _send_zip_from_entries(
+            entries=entries,
+            manifest_payload={
+                'kind': 'player',
+                'task_id': task_id or None
+            },
+            filename_prefix='学生证书'
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'下载失败: {str(e)}'}), 500
 
-        kinds = ['player', 'coach', 'excellent_coach']
-        if kind:
-            if kind not in kinds:
-                return jsonify({'success': False, 'message': 'kind 参数不合法'}), 400
-            kinds = [kind]
 
-        selected_ids = None
-        if task_id:
-            meta = _read_json(_task_path(task_id))
-            if meta and isinstance(meta.get('application_ids'), list):
-                selected_ids = [str(x) for x in meta.get('application_ids')]
-
-        zip_buffer = io.BytesIO()
-        found = 0
-        with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-            for k in kinds:
-                folder = os.path.join(_CERT_CACHE_DIR, k)
-                if not os.path.exists(folder):
-                    continue
-                for fn in os.listdir(folder):
-                    if not fn.lower().endswith('.pdf'):
-                        continue
-                    key = fn[:-4]
-                    if selected_ids is not None and k in ('player', 'coach'):
-                        if key not in selected_ids:
-                            continue
-                    fp = os.path.join(folder, fn)
-                    if not os.path.isfile(fp):
-                        continue
-                    arcname = f"{k}/{fn}"
-                    try:
-                        zf.write(fp, arcname)
-                        found += 1
-                    except Exception:
-                        continue
-
-            zf.writestr('manifest.json', json.dumps({
-                'found': found,
-                'kind': kind or 'all',
-                'task_id': task_id or None,
-                'generated_at': datetime.now().isoformat()
-            }, ensure_ascii=False, indent=2))
-
-        if found <= 0:
-            return jsonify({'success': False, 'message': '当前没有可下载的已生成证书'}), 404
-
-        zip_buffer.seek(0)
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        suffix = kind if kind else 'all'
-        filename = f"证书已生成缓存_{suffix}_{ts}.zip"
-        return send_file(
-            zip_buffer,
-            mimetype='application/zip',
-            as_attachment=True,
-            download_name=filename
+@certificate_bp.route('/api/admin/excellent-coach-certificates/download-zip', methods=['GET'])
+@require_admin()
+def download_excellent_coach_certificates_zip():
+    try:
+        task_id = str(request.args.get('task_id', '') or '').strip()
+        entries = _excellent_coach_zip_entries(task_id)
+        return _send_zip_from_entries(
+            entries=entries,
+            manifest_payload={
+                'kind': 'excellent_coach',
+                'task_id': task_id or None
+            },
+            filename_prefix='优秀辅导员证书'
         )
     except Exception as e:
         return jsonify({'success': False, 'message': f'下载失败: {str(e)}'}), 500

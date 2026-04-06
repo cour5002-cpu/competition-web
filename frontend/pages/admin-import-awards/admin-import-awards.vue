@@ -11,14 +11,6 @@
         <view class="file-name">{{ fileName || '未选择' }}</view>
       </view>
 
-      <view class="row">
-        <text class="label">生成证书</text>
-        <view class="seg">
-          <view class="seg-item" :class="autoGenerate ? 'active' : ''" @click="setAutoGenerate(true)">是</view>
-          <view class="seg-item" :class="!autoGenerate ? 'active' : ''" @click="setAutoGenerate(false)">否</view>
-        </view>
-      </view>
-
       <view class="btn-row">
         <button class="btn-secondary" @click="pickFile">选择Excel</button>
         <button class="btn" :disabled="!filePath || uploading" @click="upload">上传导入</button>
@@ -43,11 +35,11 @@
           下载错误日志
         </button>
 
-        <view class="tip" v-if="autoGenerate">
-          已开始后台生成证书。你可以前往“证书ZIP下载”页面下载已生成的证书压缩包。
+        <view class="tip">
+          已开始后台生成学生证书。你可以前往“证书ZIP下载”页面下载已生成的证书压缩包。
         </view>
 
-        <view class="tip" v-if="autoGenerate && result && result.task_id">
+        <view class="tip" v-if="result && result.task_id">
           <text>Task ID：{{ result.task_id }}</text>
           <view style="margin-top: 8px; display: flex; gap: 10px;">
             <button class="btn-secondary" @click="copyTaskId">复制Task ID</button>
@@ -73,7 +65,6 @@ export default {
     return {
       filePath: '',
       fileName: '',
-      autoGenerate: false,
       uploading: false,
       result: null,
       lastZip: null
@@ -123,10 +114,6 @@ export default {
       })
     },
 
-    setAutoGenerate(v) {
-      this.autoGenerate = !!v
-    },
-
     pickFile() {
       const pick = uni.chooseMessageFile || uni.chooseFile
       if (!pick) {
@@ -163,9 +150,7 @@ export default {
       this.uploading = true
       uni.showLoading({ title: '上传中...' })
 
-      const url = this.autoGenerate
-        ? `${BASE_URL}/api/admin/import-awards?auto_generate=1`
-        : `${BASE_URL}/api/admin/import-awards`
+      const url = `${BASE_URL}/api/admin/import-awards`
 
       uni.uploadFile({
         url,
@@ -220,7 +205,7 @@ export default {
 
     goZipPage() {
       const tid = this.result && this.result.task_id ? String(this.result.task_id) : ''
-      const qs = tid ? `?task_id=${encodeURIComponent(tid)}` : ''
+      const qs = tid ? `?kind=player&task_id=${encodeURIComponent(tid)}` : '?kind=player'
       uni.navigateTo({ url: `/pages/admin-cert-zip-download/admin-cert-zip-download${qs}` })
     },
 

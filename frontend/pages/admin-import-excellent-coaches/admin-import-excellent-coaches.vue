@@ -25,12 +25,24 @@
         <text>成功：{{ result.success_count }}</text>
         <text>失败：{{ result.failed_count }}</text>
 
+        <view v-if="result.task_id" class="file-info">
+          <text>Task ID：{{ result.task_id }}</text>
+        </view>
+
         <button
           v-if="result.error_log_available"
           class="btn-secondary"
           @click="downloadErrorLog"
         >
           下载错误日志
+        </button>
+
+        <button
+          v-if="result.task_id"
+          class="btn-secondary"
+          @click="goZipPage"
+        >
+          去下载ZIP
         </button>
       </view>
     </view>
@@ -225,6 +237,12 @@ export default {
           uni.showToast({ title: '下载失败', icon: 'none' })
         }
       })
+    },
+
+    goZipPage() {
+      const tid = this.result && this.result.task_id ? String(this.result.task_id) : ''
+      const qs = tid ? `?kind=excellent_coach&task_id=${encodeURIComponent(tid)}` : '?kind=excellent_coach'
+      uni.navigateTo({ url: `/pages/admin-cert-zip-download/admin-cert-zip-download${qs}` })
     }
   }
 }

@@ -18,7 +18,6 @@
       <button class="btn" @click="goStampUpload">盖章图片上传</button>
       <button class="btn" @click="goCertZip">证书ZIP下载</button>
       <button class="btn" @click="goStats">可视化统计</button>
-      <button class="btn" @click="goAdminMe">验证登录状态</button>
 
       <button class="btn-secondary" @click="logout">退出管理员登录</button>
     </view>
@@ -79,22 +78,6 @@ export default {
 
     goStats() {
       uni.navigateTo({ url: '/pages/admin-stats/admin-stats' })
-    },
-
-    async goAdminMe() {
-      try {
-        uni.showLoading({ title: '请求中...' })
-        const res = await request.get('/api/admin/me')
-        uni.hideLoading()
-        uni.showModal({
-          title: 'admin/me',
-          content: JSON.stringify(res || {}, null, 2),
-          showCancel: false
-        })
-      } catch (e) {
-        uni.hideLoading()
-        uni.showToast({ title: '网络错误', icon: 'error' })
-      }
     },
 
     logout() {
