@@ -103,6 +103,41 @@ def _try_send_cached_pdf(path: str, download_name: str):
     return None
 
 
+def _related_stamp_paths_for_cache_kind(kind: str):
+    try:
+        kind = str(kind or '').strip().lower()
+        if kind not in ('player', 'coach', 'excellent_coach'):
+            return []
+
+        stamp_kind = 'player' if kind == 'player' else 'coach'
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        paths = []
+        for i in range(1, 7):
+            paths.append(os.path.join(base_dir, 'assets', 'cert', 'stamps', stamp_kind, f'{i}.png'))
+        return paths
+    except Exception:
+        return []
+
+
+def _is_cached_pdf_stale(*, cached_pdf_path: str, kind: str) -> bool:
+    """Return True if cached PDF is older than any related stamp image files."""
+    try:
+        if not cached_pdf_path or (not os.path.exists(cached_pdf_path)):
+            return True
+
+        pdf_mtime = os.path.getmtime(cached_pdf_path)
+        stamp_paths = _related_stamp_paths_for_cache_kind(kind)
+        for sp in stamp_paths:
+            try:
+                if sp and os.path.exists(sp) and os.path.getmtime(sp) > pdf_mtime:
+                    return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return True
+
+
 def _start_background_cert_task(*, application_ids, source: str = ''):
     task_id = uuid.uuid4().hex
     now = datetime.now().isoformat()
@@ -564,9 +599,10 @@ def generate_certificate(application_id):
         )
 
         cached_path = _cache_pdf_path('player', str(application.id))
-        cached_resp = _try_send_cached_pdf(cached_path, filename)
-        if cached_resp is not None:
-            return cached_resp
+        if not _is_cached_pdf_stale(cached_pdf_path=cached_path, kind='player'):
+            cached_resp = _try_send_cached_pdf(cached_path, filename)
+            if cached_resp is not None:
+                return cached_resp
 
         generator = CertificateGenerator()
 
@@ -701,9 +737,10 @@ def generate_excellent_coach_certificate(coach_id):
         )
 
         cached_path = _cache_pdf_path('excellent_coach', str(coach.id))
-        cached_resp = _try_send_cached_pdf(cached_path, filename)
-        if cached_resp is not None:
-            return cached_resp
+        if not _is_cached_pdf_stale(cached_pdf_path=cached_path, kind='excellent_coach'):
+            cached_resp = _try_send_cached_pdf(cached_path, filename)
+            if cached_resp is not None:
+                return cached_resp
 
         generator = CertificateGenerator()
 
@@ -848,9 +885,10 @@ def generate_coach_certificate(application_id):
         )
 
         cached_path = _cache_pdf_path('coach', str(application.id))
-        cached_resp = _try_send_cached_pdf(cached_path, filename)
-        if cached_resp is not None:
-            return cached_resp
+        if not _is_cached_pdf_stale(cached_pdf_path=cached_path, kind='coach'):
+            cached_resp = _try_send_cached_pdf(cached_path, filename)
+            if cached_resp is not None:
+                return cached_resp
 
         generator = CertificateGenerator()
         coach_award_level = coach_award_level

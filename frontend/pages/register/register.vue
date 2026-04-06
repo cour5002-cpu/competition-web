@@ -290,7 +290,8 @@ export default {
       const phone = String(this.formData.participant_phone || '').trim()
       if (!phone) return ''
 
-      if (phone.length < 11) return ''
+      if (phone.length < 11) return '手机号需为11位'
+      if (phone.length > 11) return '手机号需为11位'
       if (!this.isValidPhone(phone)) return '手机号格式不正确'
       if (this.phoneCheck && this.phoneCheck.checking) return '正在校验手机号...'
       if (this.phoneCheck && this.phoneCheck.exists) return '该手机号已存在待审核或已通过的报名记录'
