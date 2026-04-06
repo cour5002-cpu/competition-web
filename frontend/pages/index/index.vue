@@ -4,6 +4,10 @@
       <image class="logo" src="/static/tab-home.png" mode="aspectFit"></image>
       <text class="title">青少年无人机大赛</text>
       <text class="subtitle">报名、查询、证书一站式完成</text>
+      <view class="login-entry" @click="goToUserLogin">
+        <text class="login-entry-title">用户登录</text>
+        <text class="login-entry-desc">进入首页后可直接登录，再去查询报名和证书</text>
+      </view>
     </view>
     
     <view class="quick-actions">
@@ -121,6 +125,12 @@ export default {
       uni.navigateTo({
         url: '/pages/coach-award/coach-award'
       })
+    },
+
+    goToUserLogin() {
+      uni.navigateTo({
+        url: '/pages/auth/auth'
+      })
     }
   }
 }
@@ -163,6 +173,30 @@ export default {
   display: block;
   font-size: 13px;
   opacity: 0.9;
+}
+
+.login-entry {
+  margin: 20px auto 0;
+  max-width: 280px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(6px);
+}
+
+.login-entry-title {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.login-entry-desc {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.92;
 }
 
 .quick-actions {

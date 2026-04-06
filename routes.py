@@ -185,16 +185,20 @@ def query_excellent_coach():
 
         app = Application.query.filter(
             Application.teacher_phone_hash == phone_hash,
-            Application.teacher_name == teacher_name,
-            Application.award_level.isnot(None)
-        ).order_by(Application.created_at.desc()).first()
+            Application.teacher_name == teacher_name
+        ).order_by(
+            Application.match_no.is_(None),
+            Application.created_at.desc()
+        ).first()
 
         # 兼容历史数据：teacher_phone_hash 为空时，按 teacher_name 候选 + 解密手机号比对，并回填 hash
         if not app:
             candidates = Application.query.filter(
-                Application.teacher_name == teacher_name,
-                Application.award_level.isnot(None)
-            ).order_by(Application.created_at.desc()).limit(50).all()
+                Application.teacher_name == teacher_name
+            ).order_by(
+                Application.match_no.is_(None),
+                Application.created_at.desc()
+            ).limit(50).all()
             for c in candidates:
                 try:
                     if str(getattr(c, 'teacher_phone', '') or '').strip() == teacher_phone:
@@ -210,7 +214,7 @@ def query_excellent_coach():
                     continue
 
         if not app:
-            return jsonify({'success': False, 'message': '已找到优秀辅导员记录，但暂无获奖数据，无法生成证书'}), 404
+            return jsonify({'success': False, 'message': '已找到优秀辅导员记录，但未找到对应报名记录，无法生成证书'}), 404
 
         return jsonify({
             'success': True,

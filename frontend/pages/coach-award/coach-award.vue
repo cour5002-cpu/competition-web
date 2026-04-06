@@ -55,7 +55,6 @@
         打开优秀辅导员证书
       </button>
 
-      <text v-if="!canDownload" class="warn">该参赛号暂无获奖信息，无法生成证书</text>
     </view>
   </view>
 </template>
@@ -98,7 +97,7 @@ export default {
     },
 
     canDownload() {
-      return !!(this.result && this.result.award_level && this.coachId)
+      return !!(this.result && this.coachId)
     }
   },
 

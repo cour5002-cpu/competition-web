@@ -406,6 +406,7 @@ def import_excellent_coaches():
         success_count = 0
         failed_count = 0
         error_data = []
+        updated_coach_ids = []
 
         # Excel 内部：电话唯一（同一老师电话不应重复）
         seen_phone_hash = set()
@@ -441,12 +442,16 @@ def import_excellent_coaches():
                 if existing:
                     existing.teacher_name = teacher_name
                     existing.teacher_phone = teacher_phone
+                    db.session.flush()
+                    updated_coach_ids.append(existing.id)
                 else:
                     coach = ExcellentCoach(
                         teacher_name=teacher_name
                     )
                     coach.teacher_phone = teacher_phone
                     db.session.add(coach)
+                    db.session.flush()
+                    updated_coach_ids.append(coach.id)
 
                 success_count += 1
 
@@ -475,15 +480,34 @@ def import_excellent_coaches():
         db.session.add(import_log)
         db.session.commit()
 
+        task_id = None
+        if updated_coach_ids:
+            try:
+                from certificate_routes import _start_background_excellent_coach_task
+
+                task_id = _start_background_excellent_coach_task(
+                    coach_ids=updated_coach_ids,
+                    source=f'excellent-coach-import:{import_log.id}'
+                )
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'message': f'导入成功，但优秀辅导员证书批量生成失败: {str(e)}',
+                    'data': {
+                        'import_log_id': import_log.id
+                    }
+                }), 500
+
         return jsonify({
             'success': True,
-            'message': f'导入完成，成功 {success_count} 条，失败 {failed_count} 条',
+            'message': f'导入完成，成功 {success_count} 条，失败 {failed_count} 条；优秀辅导员证书已开始后台生成',
             'data': {
                 'total_count': total_count,
                 'success_count': success_count,
                 'failed_count': failed_count,
                 'error_log_available': error_log_content is not None,
-                'import_log_id': import_log.id
+                'import_log_id': import_log.id,
+                'task_id': task_id
             }
         })
 
@@ -1306,8 +1330,7 @@ def import_awards():
         db.session.add(import_log)
         db.session.commit()
 
-        auto_generate = str(request.args.get('auto_generate', '') or '').strip() in ['1', 'true', 'True', 'yes', 'on']
-        if auto_generate and updated_application_ids:
+        if updated_application_ids:
             try:
                 from certificate_routes import _start_background_cert_task
 
