@@ -7,6 +7,7 @@ import os
 import threading
 import uuid
 import logging
+from types import SimpleNamespace
 
 from PIL import Image
 
@@ -23,6 +24,7 @@ _CERT_BASE_DIR = str(os.environ.get('CERT_STORAGE_DIR', '') or '').strip() or os
 _CERT_CACHE_DIR = os.path.join(_CERT_BASE_DIR, 'generated_certs')
 _CERT_TASK_DIR = os.path.join(_CERT_BASE_DIR, 'generated_cert_tasks')
 _EXCELLENT_COACH_TASK_DIR = os.path.join(_CERT_BASE_DIR, 'generated_excellent_coach_tasks')
+_ZIP_CACHE_DIR = os.path.join(_CERT_BASE_DIR, 'generated_zips')
 
 _logger = logging.getLogger(__name__)
 
@@ -44,6 +46,14 @@ def _task_path(task_id: str) -> str:
 
 def _excellent_coach_task_path(task_id: str) -> str:
     return _task_path_for(_EXCELLENT_COACH_TASK_DIR, task_id)
+
+
+def _excellent_coach_task_log_path(task_id: str) -> str:
+    return os.path.join(_EXCELLENT_COACH_TASK_DIR, f"{task_id}.log")
+
+
+def _cert_task_log_path(task_id: str) -> str:
+    return os.path.join(_CERT_TASK_DIR, f"{task_id}.log")
 
 
 def _write_json(path: str, payload: dict):
@@ -80,6 +90,13 @@ def _cache_pdf_path(kind: str, key: str) -> str:
     return os.path.join(folder, f"{safe_key}.pdf")
 
 
+def _zip_cache_path(kind: str, key: str) -> str:
+    folder = _ZIP_CACHE_DIR
+    safe_kind = _safe_filename_part(kind or 'zip')
+    safe_key = _safe_filename_part(key or 'all')
+    return os.path.join(folder, f"{safe_kind}_{safe_key}.zip")
+
+
 def _write_pdf_atomic(path: str, content: bytes) -> bool:
     try:
         folder = os.path.dirname(path)
@@ -96,6 +113,76 @@ def _write_pdf_atomic(path: str, content: bytes) -> bool:
         except Exception:
             pass
         return False
+
+
+def _is_cached_zip_stale(zip_path: str, entries) -> bool:
+    try:
+        if not zip_path or (not os.path.isfile(zip_path)):
+            return True
+        zip_mtime = os.path.getmtime(zip_path)
+        for entry in entries or []:
+            fp = str((entry or {}).get('file_path', '') or '').strip()
+            if not fp or (not os.path.isfile(fp)):
+                continue
+            try:
+                if os.path.getmtime(fp) > zip_mtime:
+                    return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return True
+
+
+def _build_zip_file_atomic(*, zip_path: str, entries, manifest_payload) -> tuple[bool, int]:
+    found = 0
+    tmp_path = f"{zip_path}.tmp"
+    try:
+        _ensure_dir(os.path.dirname(zip_path))
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+        with zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_STORED, allowZip64=True) as zf:
+            used_names = set()
+            for entry in entries or []:
+                fp = str((entry or {}).get('file_path', '') or '').strip()
+                zip_name = str((entry or {}).get('zip_name', '') or '').strip()
+                if (not fp) or (not zip_name) or (not os.path.isfile(fp)):
+                    continue
+
+                final_name = zip_name
+                if final_name in used_names:
+                    base, ext = os.path.splitext(zip_name)
+                    idx = 2
+                    while f"{base}_{idx}{ext}" in used_names:
+                        idx += 1
+                    final_name = f"{base}_{idx}{ext}"
+
+                try:
+                    zf.write(fp, final_name)
+                    used_names.add(final_name)
+                    found += 1
+                except Exception:
+                    continue
+
+            zf.writestr('manifest.json', json.dumps({
+                **(manifest_payload or {}),
+                'found': found,
+                'generated_at': datetime.now().isoformat()
+            }, ensure_ascii=False, indent=2))
+
+        os.replace(tmp_path, zip_path)
+        return True, found
+    except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        return False, found
 
 
 def _try_send_cached_pdf(path: str, download_name: str):
@@ -170,6 +257,7 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
 
     def _run():
         meta_path = _task_path(task_id)
+        text_log_path = _cert_task_log_path(task_id)
         meta = _read_json(meta_path) or payload
         meta['status'] = 'running'
         meta['started_at'] = datetime.now().isoformat()
@@ -236,9 +324,29 @@ def _start_background_cert_task(*, application_ids, source: str = ''):
                     except Exception as e:
                         meta['progress']['errors'] = int(meta['progress'].get('errors', 0) or 0) + 1
                         try:
-                            meta['error_details'].append({'application_id': getattr(application, 'id', None), 'error': str(e)})
+                            detail = {
+                                'application_id': getattr(application, 'id', None),
+                                'match_no': getattr(application, 'match_no', None),
+                                'error': str(e)
+                            }
+                            meta['error_details'].append(detail)
                             if len(meta['error_details']) > 50:
                                 meta['error_details'] = meta['error_details'][-50:]
+                        except Exception:
+                            pass
+                        try:
+                            from app import db
+                            db.session.rollback()
+                        except Exception:
+                            pass
+                        try:
+                            line = json.dumps({
+                                'ts': datetime.now().isoformat(),
+                                'task_id': task_id,
+                                **detail
+                            }, ensure_ascii=False)
+                            _append_text_log(text_log_path, line)
+                            print(line, flush=True)
                         except Exception:
                             pass
                         try:
@@ -298,6 +406,7 @@ def _start_background_excellent_coach_task(*, coach_ids, source: str = ''):
 
     def _run():
         meta_path = _excellent_coach_task_path(task_id)
+        text_log_path = _excellent_coach_task_log_path(task_id)
         meta = _read_json(meta_path) or payload
         meta['status'] = 'running'
         meta['started_at'] = datetime.now().isoformat()
@@ -321,28 +430,60 @@ def _start_background_excellent_coach_task(*, coach_ids, source: str = ''):
                 _write_json(meta_path, meta)
 
                 for idx, coach in enumerate(coaches):
+                    application = None
                     try:
                         application = _find_application_for_coach(
                             teacher_name=coach.teacher_name,
                             teacher_phone_hash=coach.teacher_phone_hash
                         )
                         if not application:
-                            raise ValueError('未找到已获奖的对应报名记录')
+                            raise ValueError('未找到对应报名记录')
 
                         pdf_content = _render_excellent_coach_certificate_bytes(coach, application)
                         cached_path = _cache_pdf_path('excellent_coach', str(coach.id))
                         if _write_pdf_atomic(cached_path, pdf_content):
                             meta['progress']['generated_files'] = int(meta['progress'].get('generated_files', 0) or 0) + 1
+                        else:
+                            raise IOError(f'写入证书缓存失败: {cached_path}')
                     except Exception as e:
                         meta['progress']['errors'] = int(meta['progress'].get('errors', 0) or 0) + 1
+                        detail = {
+                            'coach_id': getattr(coach, 'id', None),
+                            'teacher_name': getattr(coach, 'teacher_name', ''),
+                            'application_id': getattr(application, 'id', None),
+                            'match_no': getattr(application, 'match_no', None),
+                            'error': str(e)
+                        }
                         try:
-                            meta['error_details'].append({'coach_id': getattr(coach, 'id', None), 'error': str(e)})
+                            meta['error_details'].append(detail)
                             if len(meta['error_details']) > 50:
                                 meta['error_details'] = meta['error_details'][-50:]
                         except Exception:
                             pass
                         try:
-                            _logger.exception('excellent coach certificate task %s coach %s failed', task_id, getattr(coach, 'id', None))
+                            from app import db
+                            db.session.rollback()
+                        except Exception:
+                            pass
+                        try:
+                            line = json.dumps({
+                                'ts': datetime.now().isoformat(),
+                                'task_id': task_id,
+                                **detail
+                            }, ensure_ascii=False)
+                            _append_text_log(text_log_path, line)
+                            print(line, flush=True)
+                        except Exception:
+                            pass
+                        try:
+                            _logger.exception(
+                                'excellent coach certificate task %s failed: coach_id=%s teacher_name=%r application_id=%s match_no=%r',
+                                task_id,
+                                getattr(coach, 'id', None),
+                                getattr(coach, 'teacher_name', ''),
+                                getattr(application, 'id', None),
+                                getattr(application, 'match_no', None)
+                            )
                         except Exception:
                             pass
 
@@ -504,6 +645,32 @@ def _normalize_application_for_cert(application):
     _strip_task_sai_suffix(application)
 
 
+def _build_certificate_application_snapshot(application, *, teacher_name=None):
+    data = {}
+    try:
+        for column in application.__table__.columns:
+            data[column.name] = getattr(application, column.name, None)
+    except Exception:
+        for key in dir(application):
+            if key.startswith('_'):
+                continue
+            try:
+                value = getattr(application, key)
+            except Exception:
+                continue
+            if callable(value):
+                continue
+            data[key] = value
+
+    data['participants'] = list(getattr(application, 'participants', []) or [])
+    if teacher_name is not None:
+        data['teacher_name'] = teacher_name
+
+    snapshot = SimpleNamespace(**data)
+    _normalize_application_for_cert(snapshot)
+    return snapshot
+
+
 def _apply_student_award_level_red(template_config):
     try:
         template_config = dict(template_config or {})
@@ -647,8 +814,6 @@ def _zip_entry_name_by_match_no(match_no: str) -> str:
 
 
 def _build_player_template_config(application, CertificateTemplate, generator):
-    _normalize_application_for_cert(application)
-
     template_config, err = _pick_template_config(
         CertificateTemplate,
         generator,
@@ -717,6 +882,17 @@ def _build_player_template_config(application, CertificateTemplate, generator):
     return template_config
 
 
+def _append_text_log(path: str, line: str):
+    try:
+        folder = os.path.dirname(path)
+        _ensure_dir(folder)
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(str(line or ''))
+            f.write('\n')
+    except Exception:
+        pass
+
+
 def _build_excellent_coach_template_config(coach, application, CertificateTemplate, generator):
     coach_award_level = f"{application.award_level}-辅导员"
 
@@ -732,18 +908,6 @@ def _build_excellent_coach_template_config(coach, application, CertificateTempla
 
     try:
         template_config = dict(template_config or {})
-    except Exception:
-        pass
-
-    try:
-        cat = str(getattr(application, 'category', '') or '')
-        if cat.endswith('赛'):
-            setattr(application, 'category', cat[:-1])
-    except Exception:
-        pass
-
-    try:
-        setattr(application, 'teacher_name', coach.teacher_name)
     except Exception:
         pass
 
@@ -813,8 +977,9 @@ def _render_player_certificate_bytes(application):
     from certificate_generator import CertificateGenerator
 
     generator = CertificateGenerator()
-    template_config = _build_player_template_config(application, CertificateTemplate, generator)
-    return generator.generate_certificate(application, template_config)
+    render_application = _build_certificate_application_snapshot(application)
+    template_config = _build_player_template_config(render_application, CertificateTemplate, generator)
+    return generator.generate_certificate(render_application, template_config)
 
 
 def _render_excellent_coach_certificate_bytes(coach, application):
@@ -822,8 +987,9 @@ def _render_excellent_coach_certificate_bytes(coach, application):
     from certificate_generator import CertificateGenerator
 
     generator = CertificateGenerator()
-    template_config = _build_excellent_coach_template_config(coach, application, CertificateTemplate, generator)
-    return generator.generate_certificate(application, template_config)
+    render_application = _build_certificate_application_snapshot(application, teacher_name=coach.teacher_name)
+    template_config = _build_excellent_coach_template_config(coach, render_application, CertificateTemplate, generator)
+    return generator.generate_certificate(render_application, template_config)
 
 @certificate_bp.route('/api/certificate/generate/<int:application_id>', methods=['GET'])
 @require_user()
@@ -1122,46 +1288,34 @@ def _excellent_coach_zip_entries(task_id: str = ''):
     return entries
 
 
-def _send_zip_from_entries(*, entries, manifest_payload, filename_prefix: str):
-    zip_buffer = io.BytesIO()
-    found = 0
+def _send_zip_from_entries(*, entries, manifest_payload, filename_prefix: str, cache_kind: str, cache_key: str):
+    usable_entries = []
+    for entry in entries or []:
+        fp = str((entry or {}).get('file_path', '') or '').strip()
+        zip_name = str((entry or {}).get('zip_name', '') or '').strip()
+        if (not fp) or (not zip_name) or (not os.path.isfile(fp)):
+            continue
+        usable_entries.append({
+            'file_path': fp,
+            'zip_name': zip_name
+        })
 
-    with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-        used_names = set()
-        for entry in entries:
-            fp = str((entry or {}).get('file_path', '') or '').strip()
-            zip_name = str((entry or {}).get('zip_name', '') or '').strip()
-            if (not fp) or (not zip_name) or (not os.path.isfile(fp)):
-                continue
-
-            final_name = zip_name
-            if final_name in used_names:
-                base, ext = os.path.splitext(zip_name)
-                idx = 2
-                while f"{base}_{idx}{ext}" in used_names:
-                    idx += 1
-                final_name = f"{base}_{idx}{ext}"
-
-            try:
-                zf.write(fp, final_name)
-                used_names.add(final_name)
-                found += 1
-            except Exception:
-                continue
-
-        zf.writestr('manifest.json', json.dumps({
-            **(manifest_payload or {}),
-            'found': found,
-            'generated_at': datetime.now().isoformat()
-        }, ensure_ascii=False, indent=2))
-
-    if found <= 0:
+    if not usable_entries:
         return jsonify({'success': False, 'message': '当前没有可下载的已生成证书'}), 404
 
-    zip_buffer.seek(0)
+    zip_path = _zip_cache_path(cache_kind, cache_key)
+    if _is_cached_zip_stale(zip_path, usable_entries):
+        ok, found = _build_zip_file_atomic(
+            zip_path=zip_path,
+            entries=usable_entries,
+            manifest_payload=manifest_payload
+        )
+        if (not ok) or found <= 0:
+            return jsonify({'success': False, 'message': 'ZIP 打包失败'}), 500
+
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     return send_file(
-        zip_buffer,
+        zip_path,
         mimetype='application/zip',
         as_attachment=True,
         download_name=f"{filename_prefix}_{ts}.zip"
@@ -1233,7 +1387,9 @@ def download_player_certificates_zip():
                 'kind': 'player',
                 'task_id': task_id or None
             },
-            filename_prefix='学生证书'
+            filename_prefix='学生证书',
+            cache_kind='player',
+            cache_key=task_id or 'all'
         )
     except Exception as e:
         return jsonify({'success': False, 'message': f'下载失败: {str(e)}'}), 500
@@ -1251,7 +1407,9 @@ def download_excellent_coach_certificates_zip():
                 'kind': 'excellent_coach',
                 'task_id': task_id or None
             },
-            filename_prefix='优秀辅导员证书'
+            filename_prefix='优秀辅导员证书',
+            cache_kind='excellent_coach',
+            cache_key=task_id or 'all'
         )
     except Exception as e:
         return jsonify({'success': False, 'message': f'下载失败: {str(e)}'}), 500
